@@ -53,9 +53,12 @@ export interface AssLayerVisual {
   rotation?: number;
   outlineColor?: string;
   outlineWidth?: number;
+  outlineEnabled?: boolean;
+  outlineOpacity?: number;
   shadowColor?: string;
   shadowOpacity?: number;
   shadowDistance?: number;
+  shadowEnabled?: boolean;
   animationIn?: { preset?: "none" | "fade"; duration?: number };
   animationOut?: { preset?: "none" | "fade"; duration?: number };
 }
@@ -74,12 +77,13 @@ function assColour(hex: string | undefined, opacity = 1, fallback = "FFFFFF"): s
 function visualStyle(visual: AssLayerVisual | undefined, defaults: { outline: number; shadow: number }): { primary: string; outline: string; back: string; outlineWidth: number; shadowDistance: number; rotation: number } {
   return {
     primary: assColour(undefined, visual?.opacity ?? 1),
-    outline: assColour(visual?.outlineColor, 1, "101010"),
-    back: visual?.shadowColor !== undefined || visual?.shadowOpacity !== undefined
+    outline: assColour(visual?.outlineColor, visual?.outlineOpacity ?? 1, "101010"),
+    back: visual?.shadowEnabled === false ? "&HFF000000"
+      : visual?.shadowColor !== undefined || visual?.shadowOpacity !== undefined
       ? assColour(visual.shadowColor, visual.shadowOpacity ?? 0.44, "000000")
       : "&H90000000",
-    outlineWidth: clamp(visual?.outlineWidth ?? defaults.outline, 0, 20),
-    shadowDistance: clamp(visual?.shadowDistance ?? defaults.shadow, 0, 20),
+    outlineWidth: visual?.outlineEnabled === false ? 0 : clamp(visual?.outlineWidth ?? defaults.outline, 0, 20),
+    shadowDistance: visual?.shadowEnabled === false ? 0 : clamp(visual?.shadowDistance ?? defaults.shadow, 0, 20),
     rotation: Number.isFinite(visual?.rotation) ? visual!.rotation! : 0,
   };
 }

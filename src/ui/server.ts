@@ -346,9 +346,12 @@ function assVisual(visual: UiOverlay["visual"] | UiProject["layout"]["arabic"]["
     ...(visual.rotation !== undefined ? { rotation: visual.rotation } : {}),
     ...(visual.outlineColor !== undefined ? { outlineColor: visual.outlineColor } : {}),
     ...(visual.outlineWidth !== undefined ? { outlineWidth: visual.outlineWidth } : {}),
+    ...(visual.outlineEnabled !== undefined ? { outlineEnabled: visual.outlineEnabled } : {}),
+    ...(visual.outlineOpacity !== undefined ? { outlineOpacity: visual.outlineOpacity } : {}),
     ...(visual.shadowColor !== undefined ? { shadowColor: visual.shadowColor } : {}),
     ...(visual.shadowOpacity !== undefined ? { shadowOpacity: visual.shadowOpacity } : {}),
     ...(visual.shadowDistance !== undefined ? { shadowDistance: visual.shadowDistance } : {}),
+    ...(visual.shadowEnabled !== undefined ? { shadowEnabled: visual.shadowEnabled } : {}),
     ...(visual.animationIn?.preset === "fade" || visual.animationIn?.preset === "none" ? { animationIn: { preset: visual.animationIn.preset, ...(visual.animationIn.duration !== undefined ? { duration: visual.animationIn.duration } : {}) } } : {}),
     ...(visual.animationOut?.preset === "fade" || visual.animationOut?.preset === "none" ? { animationOut: { preset: visual.animationOut.preset, ...(visual.animationOut.duration !== undefined ? { duration: visual.animationOut.duration } : {}) } } : {}),
   };
@@ -361,8 +364,10 @@ function withTextOverlays(ass: string, overlays: UiOverlay[], durationSeconds: n
     const font = validFont(overlay.fontName ?? "Arial", `overlays[${index}].fontName`);
     const size = numeric(overlay.fontSize ?? 72, `overlays[${index}].fontSize`, 0.1);
     const visual = overlay.visual;
-    const back = visual?.shadowColor !== undefined || visual?.shadowOpacity !== undefined ? assColor(visual.shadowColor, visual.shadowOpacity ?? 0.44, "000000") : "&H90000000";
-    return `Style: Overlay${index},${font},${size},${assColor(overlay.color, visual?.opacity ?? 1)},${assColor(overlay.color, visual?.opacity ?? 1)},${assColor(visual?.outlineColor, 1, "101010")},${back},0,0,0,0,100,100,0,0,1,${clamp(visual?.outlineWidth ?? 3, 0, 20)},${clamp(visual?.shadowDistance ?? 1, 0, 20)},5,40,40,0,1`;
+    const back = visual?.shadowEnabled === false ? "&HFF000000" : visual?.shadowColor !== undefined || visual?.shadowOpacity !== undefined ? assColor(visual.shadowColor, visual.shadowOpacity ?? 0.44, "000000") : "&H90000000";
+    const outlineWidth = visual?.outlineEnabled === false ? 0 : clamp(visual?.outlineWidth ?? 3, 0, 20);
+    const shadowDistance = visual?.shadowEnabled === false ? 0 : clamp(visual?.shadowDistance ?? 1, 0, 20);
+    return `Style: Overlay${index},${font},${size},${assColor(overlay.color, visual?.opacity ?? 1)},${assColor(overlay.color, visual?.opacity ?? 1)},${assColor(visual?.outlineColor, visual?.outlineOpacity ?? 1, "101010")},${back},0,0,0,0,100,100,0,0,1,${outlineWidth},${shadowDistance},5,40,40,0,1`;
   });
   const marker = "\n\n[Events]";
   const headerIndex = ass.indexOf(marker);

@@ -139,10 +139,16 @@ function applyVisual(element, visual = {}) {
   const opacity = Math.max(0, Math.min(1, Number(visual.opacity ?? 1)));
   element.style.opacity = String(opacity);
   element.style.setProperty("--layer-rotation", `${Number(visual.rotation || 0)}deg`);
-  const outline = Math.max(0, Number(visual.outlineWidth ?? 0));
-  element.style.webkitTextStroke = outline ? `${outline}px ${visual.outlineColor || "#101010"}` : "";
-  const shadow = Math.max(0, Number(visual.shadowDistance ?? 0));
-  element.style.textShadow = shadow ? `${shadow}px ${shadow}px ${Math.max(1, shadow * 2)}px ${visual.shadowColor || "#000000"}` : "";
+  const rgba = (hex, alpha) => {
+    const match = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+    if (!match) return hex || "#000000";
+    const rgb = match[1];
+    return `rgba(${parseInt(rgb.slice(0, 2), 16)},${parseInt(rgb.slice(2, 4), 16)},${parseInt(rgb.slice(4, 6), 16)},${Math.max(0, Math.min(1, alpha))})`;
+  };
+  const outline = visual.outlineEnabled === false ? 0 : Math.max(0, Number(visual.outlineWidth ?? 0));
+  element.style.webkitTextStroke = outline ? `${outline}px ${rgba(visual.outlineColor || "#101010", visual.outlineOpacity ?? 1)}` : "";
+  const shadow = visual.shadowEnabled === false ? 0 : Math.max(0, Number(visual.shadowDistance ?? 0));
+  element.style.textShadow = shadow ? `${shadow}px ${shadow}px ${Math.max(1, shadow * 2)}px ${rgba(visual.shadowColor || "#000000", visual.shadowOpacity ?? 0.44)}` : "";
 }
 
 function captionEventId(word, index) {
@@ -295,6 +301,12 @@ function updateLayerSelection() {
   $("layer-shadow").value = visual.shadowDistance ?? 1;
   $("layer-outline-color").value = visual.outlineColor || "#101010";
   $("layer-shadow-color").value = visual.shadowColor || "#000000";
+  $("layer-outline-enabled").checked = visual.outlineEnabled !== false;
+  $("layer-shadow-enabled").checked = visual.shadowEnabled !== false;
+  $("layer-outline-opacity").value = Math.round((visual.outlineOpacity ?? 1) * 100);
+  $("layer-shadow-opacity").value = Math.round((visual.shadowOpacity ?? 0.44) * 100);
+  $("layer-outline-opacity-value").textContent = `${$("layer-outline-opacity").value}%`;
+  $("layer-shadow-opacity-value").textContent = `${$("layer-shadow-opacity").value}%`;
   arabicLayer.classList.toggle("selected", selectedLayer === "arabic");
   translationLayer.classList.toggle("selected", selectedLayer === "translation");
 }
@@ -553,6 +565,12 @@ function syncOverlayControls() {
   $("overlay-shadow").value = visual.shadowDistance ?? 1;
   $("overlay-outline-color").value = visual.outlineColor || "#101010";
   $("overlay-shadow-color").value = visual.shadowColor || "#000000";
+  $("overlay-outline-enabled").checked = visual.outlineEnabled !== false;
+  $("overlay-shadow-enabled").checked = visual.shadowEnabled !== false;
+  $("overlay-outline-opacity").value = Math.round((visual.outlineOpacity ?? 1) * 100);
+  $("overlay-shadow-opacity").value = Math.round((visual.shadowOpacity ?? 0.44) * 100);
+  $("overlay-outline-opacity-value").textContent = `${$("overlay-outline-opacity").value}%`;
+  $("overlay-shadow-opacity-value").textContent = `${$("overlay-shadow-opacity").value}%`;
   $("overlay-animation-in").value = visual.animationIn?.preset || "none";
   $("overlay-animation-out").value = visual.animationOut?.preset || "none";
   $("overlay-animation-duration").value = visual.animationIn?.duration ?? visual.animationOut?.duration ?? 250;
@@ -1028,7 +1046,7 @@ document.querySelectorAll("[data-select-layer]").forEach((button) => button.addE
 }));
 $("reset-layout").addEventListener("click", resetLayout);
 $("apply-layer-position").addEventListener("click", applyLayerPosition);
-for (const id of ["layer-opacity", "layer-rotation", "layer-outline", "layer-shadow", "layer-outline-color", "layer-shadow-color"]) {
+for (const id of ["layer-opacity", "layer-rotation", "layer-outline", "layer-shadow", "layer-outline-color", "layer-shadow-color", "layer-outline-enabled", "layer-shadow-enabled", "layer-outline-opacity", "layer-shadow-opacity"]) {
   $(id).addEventListener("input", () => {
     const visual = visualFor(currentLayer());
     visual.opacity = Number($("layer-opacity").value) / 100;
@@ -1037,6 +1055,12 @@ for (const id of ["layer-opacity", "layer-rotation", "layer-outline", "layer-sha
     visual.shadowDistance = Math.max(0, Number($("layer-shadow").value) || 0);
     visual.outlineColor = $("layer-outline-color").value;
     visual.shadowColor = $("layer-shadow-color").value;
+    visual.outlineEnabled = $("layer-outline-enabled").checked;
+    visual.shadowEnabled = $("layer-shadow-enabled").checked;
+    visual.outlineOpacity = Number($("layer-outline-opacity").value) / 100;
+    visual.shadowOpacity = Number($("layer-shadow-opacity").value) / 100;
+    $("layer-outline-opacity-value").textContent = `${$("layer-outline-opacity").value}%`;
+    $("layer-shadow-opacity-value").textContent = `${$("layer-shadow-opacity").value}%`;
     updateStageGeometry();
   });
 }
@@ -1115,7 +1139,7 @@ for (const id of ["translation", "words", "arabic-font", "translation-font", "ar
   $(id).addEventListener("change", () => { syncSettingsFromControls(); updateStageGeometry(); });
 }
 
-for (const id of ["overlay-text", "overlay-font", "overlay-size", "overlay-start", "overlay-end", "overlay-opacity", "overlay-rotation", "overlay-outline", "overlay-shadow", "overlay-outline-color", "overlay-shadow-color", "overlay-animation-in", "overlay-animation-out", "overlay-animation-duration", "overlay-lock"]) {
+for (const id of ["overlay-text", "overlay-font", "overlay-size", "overlay-start", "overlay-end", "overlay-opacity", "overlay-rotation", "overlay-outline", "overlay-shadow", "overlay-outline-color", "overlay-shadow-color", "overlay-outline-enabled", "overlay-shadow-enabled", "overlay-outline-opacity", "overlay-shadow-opacity", "overlay-animation-in", "overlay-animation-out", "overlay-animation-duration", "overlay-lock"]) {
   $(id).addEventListener("input", () => {
     const overlay = selectedOverlay();
     if (!overlay) return;
@@ -1132,6 +1156,12 @@ for (const id of ["overlay-text", "overlay-font", "overlay-size", "overlay-start
     if (id === "overlay-shadow") visual.shadowDistance = Math.max(0, Number($(id).value) || 0);
     if (id === "overlay-outline-color") visual.outlineColor = $(id).value;
     if (id === "overlay-shadow-color") visual.shadowColor = $(id).value;
+    if (id === "overlay-outline-enabled") visual.outlineEnabled = $(id).checked;
+    if (id === "overlay-shadow-enabled") visual.shadowEnabled = $(id).checked;
+    if (id === "overlay-outline-opacity") visual.outlineOpacity = Number($(id).value) / 100;
+    if (id === "overlay-shadow-opacity") visual.shadowOpacity = Number($(id).value) / 100;
+    $("overlay-outline-opacity-value").textContent = `${$("overlay-outline-opacity").value}%`;
+    $("overlay-shadow-opacity-value").textContent = `${$("overlay-shadow-opacity").value}%`;
     const duration = Math.max(0, Number($("overlay-animation-duration").value) || 0);
     if (id === "overlay-animation-in" || id === "overlay-animation-duration") visual.animationIn = { preset: $("overlay-animation-in").value, duration };
     if (id === "overlay-animation-out" || id === "overlay-animation-duration") visual.animationOut = { preset: $("overlay-animation-out").value, duration };

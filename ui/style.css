@@ -113,6 +113,11 @@ svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-lineca
 .overlay-resize-handle { right:-7px; bottom:-7px; border-radius:3px; cursor:nwse-resize; }
 .overlay-rotate-handle { left:50%; top:-27px; transform:translateX(-50%); border-radius:50%; cursor:grab; }
 .overlay-rotate-handle::after { content:""; position:absolute; width:1px; height:13px; background:var(--accent); top:12px; left:5px; }
+.effect-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:2px 0 12px; }
+.effect-control { min-width:0; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--panel-muted); }
+.effect-control .checkbox-row { margin:0 0 6px; font-size:12px; font-weight:600; }
+.effect-control input[type="range"] { width:100%; margin:0; accent-color:var(--accent); }
+.effect-control output { display:block; color:var(--muted); font-size:11px; margin-top:2px; text-align:right; }
 .transport { display: flex; align-items: center; gap: 11px; padding: 12px 0 9px; }
 .transport-play { display: grid; width: 32px; height: 32px; place-items: center; padding: 0; border: 0; border-radius: 50%; background: var(--text); color: var(--surface); }
 .transport-play svg { width: 14px; height: 14px; }

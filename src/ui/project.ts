@@ -51,9 +51,12 @@ export interface UiLayerVisual {
   rotation?: number;
   outlineColor?: string;
   outlineWidth?: number;
+  outlineEnabled?: boolean;
+  outlineOpacity?: number;
   shadowColor?: string;
   shadowOpacity?: number;
   shadowDistance?: number;
+  shadowEnabled?: boolean;
   animationIn?: UiLayerAnimation;
   animationOut?: UiLayerAnimation;
 }
