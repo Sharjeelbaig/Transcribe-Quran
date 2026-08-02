@@ -30,7 +30,7 @@ describe("ASS caption generation", () => {
     const ass = createAss([word], index);
 
     expect(ass).toContain("Noto Naskh Arabic");
-    expect(ass).toContain("{\\c&H0000D7FF&\\b1}بِسْمِ");
+    expect(ass).toContain("{\\c&H0000D7FF&\\b1}\u2067بِسْمِ\u2069");
     expect(ass).toContain("In (the) name  •  1:1");
     expect(ass).toContain("Dialogue: 0,0:00:00.40,0:00:01.20,Quran");
   });

@@ -14,21 +14,28 @@ function escapeAss(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/{/g, "\\{").replace(/}/g, "\\}").replace(/\r?\n/g, " ");
 }
 
-function contextLine(word: AlignedWord, index: QuranIndex, radius = 4): string {
+const RTL_ISOLATE = "\u2067";
+const POP_DIRECTIONAL_ISOLATE = "\u2069";
+
+function isolatedArabic(value: string): string {
+  return `${RTL_ISOLATE}${escapeAss(value)}${POP_DIRECTIONAL_ISOLATE}`;
+}
+
+function contextLine(word: AlignedWord, index: QuranIndex, radius = 3): string {
   const verse = index.verses.get(word.verseKey);
-  if (!verse) return `\u202B${escapeAss(word.arabic)}\u202C`;
+  if (!verse) return `\u202B${isolatedArabic(word.arabic)}\u202C`;
   const active = Math.max(0, word.position - 1);
   const start = Math.max(0, active - radius);
   const end = Math.min(verse.words.length, active + radius + 1);
   const line = verse.words
     .slice(start, end)
     .map((item) => {
-      const escaped = escapeAss(item.text.uthmani);
+      const isolated = isolatedArabic(item.text.uthmani);
       return item.position === word.position
-        ? `{\\c&H0000D7FF&\\b1}${escaped}{\\c&H00FFFFFF&\\b0}`
-        : escaped;
+        ? `{\\c&H0000D7FF&\\b1}${isolated}{\\c&H00FFFFFF&\\b0}`
+        : isolated;
     })
-    .join(" ");
+    .join("\u00A0");
   // Inline ASS color tags can split the Unicode bidi run. An explicit RTL
   // embedding preserves canonical Arabic word order around the active word.
   return `\u202B${line}\u202C`;
@@ -45,7 +52,7 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Quran,Noto Naskh Arabic,72,&H00FFFFFF,&H0000D7FF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,1,4,1,2,70,70,170,1
+Style: Quran,Noto Naskh Arabic,88,&H00FFFFFF,&H0000D7FF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,1,4,1,3,70,70,170,1
 Style: Translation,Arial,34,&H00FFFFFF,&H00FFFFFF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,1,3,1,2,90,90,105,1
 
 [Events]

@@ -436,5 +436,22 @@ export function materializeAlignedWords(
     output.push(current);
   }
 
+  // Whisper timestamps from adjacent inference windows can overlap slightly.
+  // ASS renders every active event, so even a small overlap draws two copies of
+  // the Arabic context line at once. Split overlaps at their midpoint to keep
+  // the word highlight continuous while guaranteeing one active word at a time.
+  for (let index = 1; index < output.length; index += 1) {
+    const previous = output[index - 1];
+    const current = output[index];
+    if (!previous || !current || current.start >= previous.end) continue;
+
+    const midpoint = (current.start + previous.end) / 2;
+    const earliestBoundary = previous.start + 0.02;
+    const latestBoundary = current.end - 0.02;
+    const boundary = Math.max(earliestBoundary, Math.min(latestBoundary, midpoint));
+    previous.end = boundary;
+    current.start = boundary;
+  }
+
   return output;
 }

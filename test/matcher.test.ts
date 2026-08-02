@@ -53,6 +53,19 @@ describe("Qur'an passage matcher", () => {
     expect(words.some((word) => word.arabic.includes("فَصَلِّ"))).toBe(true);
   });
 
+  it("removes adjacent timestamp overlaps so captions never stack", () => {
+    const transcript = transcriptFor(["1:5"]);
+    transcript[2] = { ...transcript[2]!, end: 2.2 };
+    transcript[3] = { ...transcript[3]!, start: 1.85, end: 2.8 };
+
+    const result = matchTranscript(transcript, index);
+    const words = materializeAlignedWords(result.matched, index, "saheehInternational");
+
+    expect(words.map((word) => word.position)).toEqual([1, 2, 3, 4]);
+    expect(words.every((word, position) => position === 0 || word.start >= words[position - 1]!.end)).toBe(true);
+    expect(words[2]?.end).toBe(words[3]?.start);
+  });
+
   it("refuses unrelated speech instead of inventing Qur'an captions", () => {
     const transcript = ["مرحبا", "صباح", "سياره", "جامعه", "حاسوب"].map(
       (text, position) => ({
