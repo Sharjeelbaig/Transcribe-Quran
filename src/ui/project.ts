@@ -34,6 +34,28 @@ export interface UiPoint {
 export interface UiCaptionLayer {
   position: UiPoint;
   fontSize: number;
+  visual?: UiLayerVisual;
+}
+
+export type UiAnimationPreset = "none" | "fade" | "slide-up" | "slide-down" | "scale";
+
+export interface UiLayerAnimation {
+  preset: UiAnimationPreset;
+  duration: number;
+}
+
+/** Shared appearance controls for caption and overlay layers. All fields are
+ * optional so projects created by earlier releases stay valid. */
+export interface UiLayerVisual {
+  opacity?: number;
+  rotation?: number;
+  outlineColor?: string;
+  outlineWidth?: number;
+  shadowColor?: string;
+  shadowOpacity?: number;
+  shadowDistance?: number;
+  animationIn?: UiLayerAnimation;
+  animationOut?: UiLayerAnimation;
 }
 
 export interface UiOverlay {
@@ -48,6 +70,11 @@ export interface UiOverlay {
   fontSize?: number;
   color?: string;
   visible: boolean;
+  start?: number;
+  end?: number;
+  locked?: boolean;
+  zIndex?: number;
+  visual?: UiLayerVisual;
 }
 
 export interface UiCaptionEdit {

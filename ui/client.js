@@ -130,6 +130,21 @@ function currentLayer() {
   return state.project.layout[selectedLayer];
 }
 
+function visualFor(target) {
+  target.visual ||= {};
+  return target.visual;
+}
+
+function applyVisual(element, visual = {}) {
+  const opacity = Math.max(0, Math.min(1, Number(visual.opacity ?? 1)));
+  element.style.opacity = String(opacity);
+  element.style.setProperty("--layer-rotation", `${Number(visual.rotation || 0)}deg`);
+  const outline = Math.max(0, Number(visual.outlineWidth ?? 0));
+  element.style.webkitTextStroke = outline ? `${outline}px ${visual.outlineColor || "#101010"}` : "";
+  const shadow = Math.max(0, Number(visual.shadowDistance ?? 0));
+  element.style.textShadow = shadow ? `${shadow}px ${shadow}px ${Math.max(1, shadow * 2)}px ${visual.shadowColor || "#000000"}` : "";
+}
+
 function captionEventId(word, index) {
   return `${word.verseKey}:${word.position}:${word.canonicalIndex}:${index}`;
 }
@@ -273,6 +288,13 @@ function updateLayerSelection() {
   });
   $("layer-x").value = Math.round(state.project.layout[selectedLayer].position.x);
   $("layer-y").value = Math.round(state.project.layout[selectedLayer].position.y);
+  const visual = state.project.layout[selectedLayer].visual || {};
+  $("layer-opacity").value = Math.round((visual.opacity ?? 1) * 100);
+  $("layer-rotation").value = visual.rotation ?? 0;
+  $("layer-outline").value = visual.outlineWidth ?? (selectedLayer === "arabic" ? 4 : 3);
+  $("layer-shadow").value = visual.shadowDistance ?? 1;
+  $("layer-outline-color").value = visual.outlineColor || "#101010";
+  $("layer-shadow-color").value = visual.shadowColor || "#000000";
   arabicLayer.classList.toggle("selected", selectedLayer === "arabic");
   translationLayer.classList.toggle("selected", selectedLayer === "translation");
 }
@@ -285,6 +307,7 @@ function updateStageGeometry() {
     element.style.top = `${(layer.position.y / DESIGN_HEIGHT) * 100}%`;
     element.style.fontSize = `${Math.max(8, layer.fontSize * stage.clientHeight / DESIGN_HEIGHT)}px`;
     element.style.fontFamily = name === "arabic" ? `"${state.project.settings.arabicFontName}", serif` : `"${state.project.settings.translationFontName}", sans-serif`;
+    applyVisual(element, layer.visual);
   }
   for (const overlay of state.project.overlays || []) {
     const element = document.querySelector(`[data-overlay-id="${CSS.escape(overlay.id)}"]`);
@@ -294,6 +317,8 @@ function updateStageGeometry() {
     element.style.width = `${overlay.width * 100}%`;
     element.style.height = `${overlay.height * 100}%`;
     if (overlay.fontSize) element.style.fontSize = `${Math.max(8, overlay.fontSize * stage.clientHeight / DESIGN_HEIGHT)}px`;
+    element.style.zIndex = String(10 + Number(overlay.zIndex || 0));
+    applyVisual(element, overlay.visual);
   }
 }
 
@@ -358,6 +383,7 @@ function updatePlayer() {
     element.classList.toggle("selected", selectedCaptionIndex === index);
   });
   renderCaption();
+  renderOverlays();
 }
 
 function renderTimeline() {
@@ -440,6 +466,10 @@ function renderOverlays() {
   root.innerHTML = "";
   for (const overlay of state.project.overlays || []) {
     if (!overlay.visible) continue;
+    const now = video.currentTime || 0;
+    const start = Number(overlay.start ?? 0);
+    const end = Number(overlay.end ?? state.project.durationSeconds ?? video.duration ?? Infinity);
+    if (now < start || now > end) continue;
     const element = document.createElement("div");
     element.className = "custom-overlay";
     if (overlay.id === selectedOverlayId) element.classList.add("selected");
@@ -452,6 +482,17 @@ function renderOverlays() {
       image.alt = "Image overlay";
       image.draggable = false;
       element.appendChild(image);
+    }
+    if (overlay.id === selectedOverlayId) {
+      const resize = document.createElement("button");
+      resize.className = "overlay-resize-handle";
+      resize.setAttribute("aria-label", "Resize overlay");
+      resize.addEventListener("pointerdown", (event) => beginOverlayResize(event, overlay, element));
+      const rotate = document.createElement("button");
+      rotate.className = "overlay-rotate-handle";
+      rotate.setAttribute("aria-label", "Rotate overlay");
+      rotate.addEventListener("pointerdown", (event) => beginOverlayRotate(event, overlay, element));
+      element.append(resize, rotate);
     }
     if (overlay.color) element.style.color = overlay.color;
     element.addEventListener("pointerdown", (event) => {
@@ -495,11 +536,27 @@ function selectedOverlay() {
 
 function syncOverlayControls() {
   const overlay = selectedOverlay();
-  $("overlay-editor").classList.toggle("hidden", !overlay || overlay.type !== "text");
-  if (!overlay || overlay.type !== "text") return;
+  $("overlay-editor").classList.toggle("hidden", !overlay);
+  if (!overlay) return;
+  $("overlay-text-wrap").classList.toggle("hidden", overlay.type !== "text");
+  $("overlay-font").closest("label").classList.toggle("hidden", overlay.type !== "text");
+  $("overlay-size").closest("label").classList.toggle("hidden", overlay.type !== "text");
   $("overlay-text").value = overlay.text || "";
   $("overlay-font").value = overlay.fontName || "Arial";
   $("overlay-size").value = overlay.fontSize || 72;
+  $("overlay-start").value = Number(overlay.start ?? 0).toFixed(2);
+  $("overlay-end").value = Number(overlay.end ?? state.project.durationSeconds ?? video.duration ?? 0).toFixed(2);
+  const visual = overlay.visual || {};
+  $("overlay-opacity").value = Math.round((visual.opacity ?? 1) * 100);
+  $("overlay-rotation").value = visual.rotation ?? 0;
+  $("overlay-outline").value = visual.outlineWidth ?? 3;
+  $("overlay-shadow").value = visual.shadowDistance ?? 1;
+  $("overlay-outline-color").value = visual.outlineColor || "#101010";
+  $("overlay-shadow-color").value = visual.shadowColor || "#000000";
+  $("overlay-animation-in").value = visual.animationIn?.preset || "none";
+  $("overlay-animation-out").value = visual.animationOut?.preset || "none";
+  $("overlay-animation-duration").value = visual.animationIn?.duration ?? visual.animationOut?.duration ?? 250;
+  $("overlay-lock").checked = Boolean(overlay.locked);
 }
 
 function renderState(next) {
@@ -610,16 +667,36 @@ function beginLayerResize(event, layerName, element) {
 }
 
 function beginOverlayDrag(event, overlay, element) {
+  if (overlay.locked) return;
   event.preventDefault();
   const rect = overlayStage.getBoundingClientRect();
   drag = { kind: "overlay", overlay, startX: event.clientX, startY: event.clientY, startPosition: { ...overlay.position }, rect, element, before: projectSnapshot() };
   element.setPointerCapture?.(event.pointerId);
 }
 
+function beginOverlayResize(event, overlay, element) {
+  if (overlay.locked) return;
+  event.preventDefault();
+  event.stopPropagation();
+  drag = { kind: "overlay-resize", overlay, startX: event.clientX, startY: event.clientY, startWidth: overlay.width, startHeight: overlay.height, rect: overlayStage.getBoundingClientRect(), element, before: projectSnapshot() };
+  element.setPointerCapture?.(event.pointerId);
+}
+
+function beginOverlayRotate(event, overlay, element) {
+  if (overlay.locked) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const rect = element.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  drag = { kind: "overlay-rotate", overlay, centerX, centerY, startAngle: Math.atan2(event.clientY - centerY, event.clientX - centerX) * 180 / Math.PI, startRotation: Number(overlay.visual?.rotation || 0), element, before: projectSnapshot() };
+  element.setPointerCapture?.(event.pointerId);
+}
+
 function moveDrag(event) {
   if (!drag) return;
-  const dx = ((event.clientX - drag.startX) / drag.rect.width) * DESIGN_WIDTH;
-  const dy = ((event.clientY - drag.startY) / drag.rect.height) * DESIGN_HEIGHT;
+  const dx = drag.rect ? ((event.clientX - drag.startX) / drag.rect.width) * DESIGN_WIDTH : 0;
+  const dy = drag.rect ? ((event.clientY - drag.startY) / drag.rect.height) * DESIGN_HEIGHT : 0;
   if (drag.kind === "resize") {
     const layer = state.project.layout[drag.layerName];
     layer.fontSize = Math.max(8, Math.round(drag.startSize + dy));
@@ -628,6 +705,12 @@ function moveDrag(event) {
   } else if (drag.kind === "overlay") {
     drag.overlay.position.x = Math.min(1, Math.max(0, drag.startPosition.x + dx / DESIGN_WIDTH));
     drag.overlay.position.y = Math.min(1, Math.max(0, drag.startPosition.y + dy / DESIGN_HEIGHT));
+  } else if (drag.kind === "overlay-resize") {
+    drag.overlay.width = Math.min(1, Math.max(0.03, drag.startWidth + (event.clientX - drag.startX) / drag.rect.width));
+    drag.overlay.height = Math.min(1, Math.max(0.03, drag.startHeight + (event.clientY - drag.startY) / drag.rect.height));
+  } else if (drag.kind === "overlay-rotate") {
+    const angle = Math.atan2(event.clientY - drag.centerY, event.clientX - drag.centerX) * 180 / Math.PI;
+    visualFor(drag.overlay).rotation = Math.round(drag.startRotation + angle - drag.startAngle);
   } else {
     const layer = state.project.layout[drag.layerName];
     layer.position.x = Math.min(DESIGN_WIDTH, Math.max(0, drag.startPosition.x + dx));
@@ -672,7 +755,10 @@ function addTextOverlay() {
     fontName: "Arial",
     fontSize: 72,
     color: "#ffffff",
-    visible: true
+    visible: true,
+    start: 0,
+    end: Number(state.project.durationSeconds || video.duration || 0),
+    visual: { opacity: 1, outlineWidth: 3, shadowDistance: 1, animationIn: { preset: "none", duration: 250 }, animationOut: { preset: "none", duration: 250 } }
   };
   state.project.overlays.push(overlay);
   selectedOverlayId = overlay.id;
@@ -701,7 +787,10 @@ async function uploadImage(file) {
       position: { x: 0.5, y: 0.25 },
       width: 0.22,
       height: 0.12,
-      visible: true
+      visible: true,
+      start: 0,
+      end: Number(state.project.durationSeconds || video.duration || 0),
+      visual: { opacity: 1, animationIn: { preset: "none", duration: 250 }, animationOut: { preset: "none", duration: 250 } }
     };
     state.project.overlays.push(overlay);
     selectedOverlayId = overlay.id;
@@ -939,6 +1028,18 @@ document.querySelectorAll("[data-select-layer]").forEach((button) => button.addE
 }));
 $("reset-layout").addEventListener("click", resetLayout);
 $("apply-layer-position").addEventListener("click", applyLayerPosition);
+for (const id of ["layer-opacity", "layer-rotation", "layer-outline", "layer-shadow", "layer-outline-color", "layer-shadow-color"]) {
+  $(id).addEventListener("input", () => {
+    const visual = visualFor(currentLayer());
+    visual.opacity = Number($("layer-opacity").value) / 100;
+    visual.rotation = Number($("layer-rotation").value) || 0;
+    visual.outlineWidth = Math.max(0, Number($("layer-outline").value) || 0);
+    visual.shadowDistance = Math.max(0, Number($("layer-shadow").value) || 0);
+    visual.outlineColor = $("layer-outline-color").value;
+    visual.shadowColor = $("layer-shadow-color").value;
+    updateStageGeometry();
+  });
+}
 $("timeline-zoom").addEventListener("click", () => {
   timelineZoom = timelineZoom === 1 ? 2 : timelineZoom === 2 ? 4 : 1;
   $("timeline-zoom").setAttribute("aria-label", `Timeline zoom ${timelineZoom}x`);
@@ -1014,13 +1115,26 @@ for (const id of ["translation", "words", "arabic-font", "translation-font", "ar
   $(id).addEventListener("change", () => { syncSettingsFromControls(); updateStageGeometry(); });
 }
 
-for (const id of ["overlay-text", "overlay-font", "overlay-size"]) {
+for (const id of ["overlay-text", "overlay-font", "overlay-size", "overlay-start", "overlay-end", "overlay-opacity", "overlay-rotation", "overlay-outline", "overlay-shadow", "overlay-outline-color", "overlay-shadow-color", "overlay-animation-in", "overlay-animation-out", "overlay-animation-duration", "overlay-lock"]) {
   $(id).addEventListener("input", () => {
     const overlay = selectedOverlay();
     if (!overlay) return;
     if (id === "overlay-text") overlay.text = $(id).value;
     if (id === "overlay-font") overlay.fontName = $(id).value.trim() || "Arial";
     if (id === "overlay-size") overlay.fontSize = Math.max(1, Number($(id).value) || 72);
+    if (id === "overlay-start") overlay.start = Math.max(0, Number($(id).value) || 0);
+    if (id === "overlay-end") overlay.end = Math.max(0.01, Number($(id).value) || 0.01);
+    if (id === "overlay-lock") overlay.locked = $(id).checked;
+    const visual = visualFor(overlay);
+    if (id === "overlay-opacity") visual.opacity = Number($(id).value) / 100;
+    if (id === "overlay-rotation") visual.rotation = Number($(id).value) || 0;
+    if (id === "overlay-outline") visual.outlineWidth = Math.max(0, Number($(id).value) || 0);
+    if (id === "overlay-shadow") visual.shadowDistance = Math.max(0, Number($(id).value) || 0);
+    if (id === "overlay-outline-color") visual.outlineColor = $(id).value;
+    if (id === "overlay-shadow-color") visual.shadowColor = $(id).value;
+    const duration = Math.max(0, Number($("overlay-animation-duration").value) || 0);
+    if (id === "overlay-animation-in" || id === "overlay-animation-duration") visual.animationIn = { preset: $("overlay-animation-in").value, duration };
+    if (id === "overlay-animation-out" || id === "overlay-animation-duration") visual.animationOut = { preset: $("overlay-animation-out").value, duration };
     renderOverlays();
   });
 }

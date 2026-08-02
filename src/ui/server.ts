@@ -315,13 +315,54 @@ function escapeAss(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/{/g, "\\{").replace(/}/g, "\\}").replace(/\r?\n/g, " ");
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function assColor(value: string | undefined, opacity = 1, fallback = "FFFFFF"): string {
+  const match = /^#?([0-9a-f]{6})$/i.exec(value ?? "");
+  const rgb = match?.[1] ?? fallback;
+  const alpha = Math.round((1 - clamp(opacity, 0, 1)) * 255).toString(16).padStart(2, "0").toUpperCase();
+  return `&H${alpha}${rgb.slice(4, 6)}${rgb.slice(2, 4)}${rgb.slice(0, 2)}`;
+}
+
+function overlayTiming(overlay: UiOverlay, duration: number): { start: number; end: number } {
+  const start = clamp(Number.isFinite(overlay.start) ? overlay.start! : 0, 0, duration);
+  const requestedEnd = Number.isFinite(overlay.end) ? overlay.end! : duration;
+  return { start, end: Math.max(start + 0.01, clamp(requestedEnd, 0.01, duration)) };
+}
+
+function fadeDurations(overlay: UiOverlay, span: number): { enter: number; exit: number } {
+  const max = Math.max(0, Math.round(span * 500));
+  const enter = overlay.visual?.animationIn?.preset === "fade" ? clamp(Math.round(overlay.visual.animationIn.duration ?? 250), 0, max) : 0;
+  const exit = overlay.visual?.animationOut?.preset === "fade" ? clamp(Math.round(overlay.visual.animationOut.duration ?? 250), 0, max) : 0;
+  return { enter, exit };
+}
+
+function assVisual(visual: UiOverlay["visual"] | UiProject["layout"]["arabic"]["visual"]) {
+  if (!visual) return undefined;
+  return {
+    ...(visual.opacity !== undefined ? { opacity: visual.opacity } : {}),
+    ...(visual.rotation !== undefined ? { rotation: visual.rotation } : {}),
+    ...(visual.outlineColor !== undefined ? { outlineColor: visual.outlineColor } : {}),
+    ...(visual.outlineWidth !== undefined ? { outlineWidth: visual.outlineWidth } : {}),
+    ...(visual.shadowColor !== undefined ? { shadowColor: visual.shadowColor } : {}),
+    ...(visual.shadowOpacity !== undefined ? { shadowOpacity: visual.shadowOpacity } : {}),
+    ...(visual.shadowDistance !== undefined ? { shadowDistance: visual.shadowDistance } : {}),
+    ...(visual.animationIn?.preset === "fade" || visual.animationIn?.preset === "none" ? { animationIn: { preset: visual.animationIn.preset, ...(visual.animationIn.duration !== undefined ? { duration: visual.animationIn.duration } : {}) } } : {}),
+    ...(visual.animationOut?.preset === "fade" || visual.animationOut?.preset === "none" ? { animationOut: { preset: visual.animationOut.preset, ...(visual.animationOut.duration !== undefined ? { duration: visual.animationOut.duration } : {}) } } : {}),
+  };
+}
+
 function withTextOverlays(ass: string, overlays: UiOverlay[], durationSeconds: number): string {
   const textOverlays = overlays.filter((overlay) => overlay.visible && overlay.type === "text" && overlay.text?.trim());
   if (!textOverlays.length) return ass;
   const styleLines = textOverlays.map((overlay, index) => {
     const font = validFont(overlay.fontName ?? "Arial", `overlays[${index}].fontName`);
     const size = numeric(overlay.fontSize ?? 72, `overlays[${index}].fontSize`, 0.1);
-    return `Style: Overlay${index},${font},${size},&H00FFFFFF,&H00FFFFFF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,1,3,1,5,40,40,0,1`;
+    const visual = overlay.visual;
+    const back = visual?.shadowColor !== undefined || visual?.shadowOpacity !== undefined ? assColor(visual.shadowColor, visual.shadowOpacity ?? 0.44, "000000") : "&H90000000";
+    return `Style: Overlay${index},${font},${size},${assColor(overlay.color, visual?.opacity ?? 1)},${assColor(overlay.color, visual?.opacity ?? 1)},${assColor(visual?.outlineColor, 1, "101010")},${back},0,0,0,0,100,100,0,0,1,${clamp(visual?.outlineWidth ?? 3, 0, 20)},${clamp(visual?.shadowDistance ?? 1, 0, 20)},5,40,40,0,1`;
   });
   const marker = "\n\n[Events]";
   const headerIndex = ass.indexOf(marker);
@@ -330,7 +371,11 @@ function withTextOverlays(ass: string, overlays: UiOverlay[], durationSeconds: n
   const events = textOverlays.map((overlay, index) => {
     const x = Math.round(Math.min(1, Math.max(0, overlay.position.x)) * DESIGN_WIDTH);
     const y = Math.round(Math.min(1, Math.max(0, overlay.position.y)) * DESIGN_HEIGHT);
-    return `Dialogue: 2,0:00:00.00,${assTime(durationSeconds)},Overlay${index},,0,0,0,,{\\an5\\pos(${x},${y})}${escapeAss(overlay.text ?? "")}`;
+    const timing = overlayTiming(overlay, durationSeconds);
+    const fade = fadeDurations(overlay, timing.end - timing.start);
+    const rotation = Number.isFinite(overlay.visual?.rotation) && overlay.visual?.rotation ? `\\frz${overlay.visual.rotation}` : "";
+    const fadeTag = fade.enter || fade.exit ? `\\fad(${fade.enter},${fade.exit})` : "";
+    return `Dialogue: 2,${assTime(timing.start)},${assTime(timing.end)},Overlay${index},,0,0,0,,{\\an5\\pos(${x},${y})${rotation}${fadeTag}}${escapeAss(overlay.text ?? "")}`;
   });
   return `${withStyles.trimEnd()}\n${events.join("\n")}\n`;
 }
@@ -455,7 +500,9 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
     const corpus = await loadQuranCorpus();
     const index = buildQuranIndex(corpus);
     const settings = project.settings;
-    let ass = createAss(editedAlignment.words, index, settings.wordsPerCaption, {
+    const arabicVisual = assVisual(project.layout.arabic.visual);
+    const translationVisual = assVisual(project.layout.translation.visual);
+    const assOptions = {
       arabicFontName: settings.arabicFontName,
       translationFontName: settings.translationFontName,
       arabicFontSize: project.layout.arabic.fontSize,
@@ -463,7 +510,10 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
       captionGap: settings.captionGap,
       arabicPosition: project.layout.arabic.position,
       translationPosition: project.layout.translation.position,
-    });
+    };
+    if (arabicVisual) Object.assign(assOptions, { arabicVisual });
+    if (translationVisual) Object.assign(assOptions, { translationVisual });
+    let ass = createAss(editedAlignment.words, index, settings.wordsPerCaption, assOptions);
     ass = withTextOverlays(ass, project.overlays, editedAlignment.durationSeconds);
     await writeFile(subtitlePath, ass, "utf8");
     lastOutput = { subtitles: subtitlePath };
@@ -476,6 +526,11 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
           y: Math.min(1, Math.max(0, overlay.position.y)),
           width: Math.min(1, Math.max(0.01, overlay.width)),
           height: Math.min(1, Math.max(0.01, overlay.height)),
+          start: overlayTiming(overlay, editedAlignment.durationSeconds).start,
+          end: overlayTiming(overlay, editedAlignment.durationSeconds).end,
+          opacity: clamp(overlay.visual?.opacity ?? 1, 0, 1),
+          fadeIn: fadeDurations(overlay, overlayTiming(overlay, editedAlignment.durationSeconds).end - overlayTiming(overlay, editedAlignment.durationSeconds).start).enter / 1000,
+          fadeOut: fadeDurations(overlay, overlayTiming(overlay, editedAlignment.durationSeconds).end - overlayTiming(overlay, editedAlignment.durationSeconds).start).exit / 1000,
         }))
         .filter((overlay) => overlay.path);
       await renderCaptionedVideo(project.videoPath, subtitlePath, videoOutputPath, fontDirectory, imageOverlays);

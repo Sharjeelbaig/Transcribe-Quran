@@ -93,7 +93,7 @@ svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-lineca
 .stage { position: relative; width: min(100%, 1120px); max-height: 650px; background: #000; overflow: hidden; }
 .stage video { display: block; width: 100%; height: auto; background: #000; }
 .overlay-stage { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.caption-layer, .custom-overlay { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; user-select: none; text-align: center; white-space: nowrap; text-shadow: 0 2px 3px rgba(0,0,0,.95), 0 0 2px #000; }
+.caption-layer, .custom-overlay { position: absolute; transform: translate(-50%, -50%) rotate(var(--layer-rotation, 0deg)); transform-origin: center; pointer-events: auto; user-select: none; text-align: center; white-space: nowrap; text-shadow: 0 2px 3px rgba(0,0,0,.95), 0 0 2px #000; }
 .caption-layer { padding: 5px 12px; border: 1px solid transparent; border-radius: 5px; cursor: move; }
 .caption-layer.selected { border-color: var(--accent); background: rgba(255,255,255,.08); }
 .caption-content { line-height: 1.08; }
@@ -105,9 +105,14 @@ svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-lineca
 .translation-layer .caption-content { direction: ltr; }
 .resize-handle { position: absolute; right: -5px; bottom: -5px; width: 12px; height: 12px; padding: 0; border: 1px solid #222; border-radius: 3px; background: var(--accent); cursor: nwse-resize; opacity: 0; }
 .caption-layer.selected .resize-handle { opacity: 1; }
-.custom-overlay { border: 1px dashed rgba(255,255,255,.7); padding: 5px 10px; color: #fff; cursor: move; }
+.custom-overlay { border: 1px dashed transparent; padding: 5px 10px; color: #fff; cursor: move; box-sizing: border-box; }
 .custom-overlay.selected { border-style: solid; border-color: var(--accent); background: rgba(255,255,255,.08); }
 .custom-overlay img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.overlay-resize-handle, .overlay-rotate-handle { position:absolute; z-index:4; width:13px; height:13px; padding:0; border:1px solid #222; background:var(--accent); opacity:0; }
+.custom-overlay.selected .overlay-resize-handle, .custom-overlay.selected .overlay-rotate-handle { opacity:1; }
+.overlay-resize-handle { right:-7px; bottom:-7px; border-radius:3px; cursor:nwse-resize; }
+.overlay-rotate-handle { left:50%; top:-27px; transform:translateX(-50%); border-radius:50%; cursor:grab; }
+.overlay-rotate-handle::after { content:""; position:absolute; width:1px; height:13px; background:var(--accent); top:12px; left:5px; }
 .transport { display: flex; align-items: center; gap: 11px; padding: 12px 0 9px; }
 .transport-play { display: grid; width: 32px; height: 32px; place-items: center; padding: 0; border: 0; border-radius: 50%; background: var(--text); color: var(--surface); }
 .transport-play svg { width: 14px; height: 14px; }

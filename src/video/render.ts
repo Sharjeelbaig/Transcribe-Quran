@@ -33,9 +33,14 @@ export async function renderCaptionedVideo(
       const scaled = `overlay${index}`;
       const base = `base${index}`;
       const outputLabel = index === imageOverlays.length - 1 ? "vout" : `composite${index}`;
+      const prepared = `prepared${index}`;
+      const effects = ["format=rgba", `colorchannelmixer=aa=${Math.min(1, Math.max(0, overlay.opacity ?? 1))}`];
+      if (overlay.fadeIn && overlay.fadeIn > 0) effects.push(`fade=t=in:st=${overlay.start}:d=${overlay.fadeIn}:alpha=1`);
+      if (overlay.fadeOut && overlay.fadeOut > 0) effects.push(`fade=t=out:st=${Math.max(overlay.start, overlay.end - overlay.fadeOut)}:d=${overlay.fadeOut}:alpha=1`);
       graph.push(
-        `[${index + 1}:v][${previous}]scale2ref=w=main_w*${overlay.width}:h=main_h*${overlay.height}[${scaled}][${base}]`,
-        `[${base}][${scaled}]overlay=x=main_w*${overlay.x}-overlay_w/2:y=main_h*${overlay.y}-overlay_h/2:shortest=1[${outputLabel}]`,
+        `[${index + 1}:v]${effects.join(",")}[${prepared}]`,
+        `[${prepared}][${previous}]scale2ref=w=main_w*${overlay.width}:h=main_h*${overlay.height}[${scaled}][${base}]`,
+        `[${base}][${scaled}]overlay=x=main_w*${overlay.x}-overlay_w/2:y=main_h*${overlay.y}-overlay_h/2:enable='between(t,${overlay.start},${overlay.end})'[${outputLabel}]`,
       );
       previous = outputLabel;
     });
@@ -51,4 +56,9 @@ export interface ImageOverlay {
   y: number;
   width: number;
   height: number;
+  start: number;
+  end: number;
+  opacity?: number;
+  fadeIn?: number;
+  fadeOut?: number;
 }
