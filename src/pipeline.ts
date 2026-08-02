@@ -109,6 +109,10 @@ export async function processVideo(options: ProcessOptions): Promise<ProcessResu
     await writeFile(
       paths.subtitles,
       createAss(words, index, options.wordsPerCaption ?? 1, {
+        ...(options.fontName !== undefined ? { arabicFontName: options.fontName } : {}),
+        ...(options.translationFontName !== undefined
+          ? { translationFontName: options.translationFontName }
+          : {}),
         ...(options.fontSize !== undefined ? { arabicFontSize: options.fontSize } : {}),
         ...(options.translationFontSize !== undefined
           ? { translationFontSize: options.translationFontSize }

@@ -75,4 +75,18 @@ describe("ASS caption generation", () => {
     expect(ass).toContain("Style: Quran,Noto Naskh Arabic,110,");
     expect(ass).toContain("Style: Translation,Arial,42,");
   });
+
+  it("accepts user-selected Arabic and English font families", () => {
+    const ass = createAss([], index, 1, {
+      arabicFontName: "Amiri",
+      translationFontName: "Georgia",
+    });
+
+    expect(ass).toContain("Style: Quran,Amiri,88,");
+    expect(ass).toContain("Style: Translation,Georgia,34,");
+  });
+
+  it("rejects font names that would corrupt the ASS style format", () => {
+    expect(() => createAss([], index, 1, { arabicFontName: "Bad,Font" })).toThrow("font family name");
+  });
 });

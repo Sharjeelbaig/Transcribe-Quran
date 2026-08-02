@@ -6,6 +6,8 @@ export {
   createAss,
   DEFAULT_ARABIC_FONT_SIZE,
   DEFAULT_TRANSLATION_FONT_SIZE,
+  DEFAULT_ARABIC_FONT_NAME,
+  DEFAULT_TRANSLATION_FONT_NAME,
 } from "./captions/ass.js";
 export { refineFinalWordTimings } from "./audio/timing.js";
 export { transcribeAudio, DEFAULT_MODEL } from "./model/transcriber.js";

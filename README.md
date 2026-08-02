@@ -61,6 +61,9 @@ npx transcribe-quran ./video.mp4 --words 4
 # Increase Arabic and English caption sizes
 npx transcribe-quran ./video.mp4 --font-size 110 --translation-font-size 42
 
+# Choose installed font families
+npx transcribe-quran ./video.mp4 --font Amiri --translation-font Georgia
+
 # Require a model that is already present in the local cache
 npx transcribe-quran ./video.mp4 --offline
 
@@ -82,7 +85,9 @@ to the left. The Arabic and English caption pair is centered horizontally and
 vertically in the video by default.
 
 Use `--font-size` for Arabic and `--translation-font-size` for English. The
-defaults are 88 and 34 respectively.
+defaults are 88 and 34 respectively. Use `--font` and `--translation-font` to
+choose font families; the defaults are Noto Naskh Arabic and Arial. The font
+must be installed on the system or available in the renderer's fonts directory.
 
 ## How matching works
 
