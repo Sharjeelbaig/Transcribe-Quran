@@ -6,7 +6,7 @@ import {
   DEFAULT_TRANSLATION_FONT_SIZE,
 } from "../captions/ass.js";
 import { DEFAULT_MODEL } from "../model/transcriber.js";
-import type { TranslationKey } from "../types.js";
+import type { AlignmentDocument, AlignedWord, TranslationKey } from "../types.js";
 
 export const PROJECT_SCHEMA_VERSION = 1 as const;
 export const DESIGN_WIDTH = 1080;
@@ -50,6 +50,16 @@ export interface UiOverlay {
   visible: boolean;
 }
 
+export interface UiCaptionEdit {
+  arabic?: string;
+  wordTranslation?: string;
+  start?: number;
+  end?: number;
+  hidden?: boolean;
+}
+
+export type UiCaptionEdits = Record<string, UiCaptionEdit>;
+
 export interface UiProject {
   schemaVersion: typeof PROJECT_SCHEMA_VERSION;
   videoName?: string;
@@ -63,6 +73,44 @@ export interface UiProject {
     translation: UiCaptionLayer;
   };
   overlays: UiOverlay[];
+  captionEdits: UiCaptionEdits;
+}
+
+/** Stable within one generated alignment and shared by the UI and exporter. */
+export function captionEventId(word: Pick<AlignedWord, "verseKey" | "position" | "canonicalIndex">, index: number): string {
+  return `${word.verseKey}:${word.position}:${word.canonicalIndex}:${index}`;
+}
+
+function clampTime(value: number, duration: number): number {
+  return Math.max(0, Math.min(duration, value));
+}
+
+export function applyCaptionEdits(alignment: AlignmentDocument, edits: UiCaptionEdits): AlignmentDocument {
+  const words = alignment.words.flatMap((word, index) => {
+    const edit = edits[captionEventId(word, index)];
+    if (!edit) return [word];
+    if (edit.hidden) return [];
+    const maxStart = Math.max(0, alignment.durationSeconds - 0.01);
+    const start = Math.min(maxStart, clampTime(edit.start ?? word.start, alignment.durationSeconds));
+    const requestedEnd = clampTime(edit.end ?? word.end, alignment.durationSeconds);
+    const end = Math.max(start + 0.01, requestedEnd);
+    return [{
+      ...word,
+      ...(edit.arabic !== undefined ? { arabic: edit.arabic } : {}),
+      ...(edit.wordTranslation !== undefined ? { wordTranslation: edit.wordTranslation } : {}),
+      start,
+      end: Math.min(alignment.durationSeconds, end),
+    }];
+  });
+  return {
+    ...alignment,
+    words,
+    diagnostics: {
+      ...alignment.diagnostics,
+      matchedWords: words.length,
+      inferredWords: words.filter((word) => word.inferredTiming).length,
+    },
+  };
 }
 
 export function defaultCaptionLayerPositions(settings: Pick<UiCaptionSettings, "arabicFontSize" | "translationFontSize" | "captionGap">): UiProject["layout"] {
@@ -108,6 +156,7 @@ export function createEmptyProject(): UiProject {
     settings,
     layout: defaultCaptionLayerPositions(settings),
     overlays: [],
+    captionEdits: {},
   };
 }
 

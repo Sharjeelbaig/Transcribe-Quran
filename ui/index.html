@@ -138,6 +138,15 @@
             <div id="translation-font-menu" class="font-menu popover hidden"><input id="translation-font-search" class="font-search" placeholder="Search fonts…" /><div id="translation-font-options" class="font-options"></div></div>
           </div>
           <label class="checkbox-row"><input id="offline" type="checkbox" /> Offline model access only</label>
+          <section id="caption-editor" class="caption-editor hidden">
+            <div class="subsection-heading"><div><strong>Edit selected caption</strong><span id="caption-editor-title" class="caption-editor-title"></span></div><button id="caption-close" class="text-button">Close</button></div>
+            <div id="caption-editor-meta" class="caption-editor-meta">Automatic match</div>
+            <label>Arabic<textarea id="caption-arabic" dir="rtl" rows="2"></textarea></label>
+            <label>Translation<textarea id="caption-translation" rows="2"></textarea></label>
+            <div class="field-grid"><label>Start (seconds)<input id="caption-start" type="number" min="0" step="0.01" /></label><label>End (seconds)<input id="caption-end" type="number" min="0" step="0.01" /></label></div>
+            <div class="button-row"><button id="caption-shift-back" class="button outline">− 50 ms</button><button id="caption-shift-forward" class="button outline">+ 50 ms</button></div>
+            <div class="button-row"><button id="caption-hide" class="button outline">Hide caption</button><button id="caption-reset" class="button outline" disabled>Reset automatic</button></div>
+          </section>
         </section>
 
         <section id="tool-layout" class="inspector-section hidden">

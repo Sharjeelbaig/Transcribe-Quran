@@ -24,6 +24,7 @@ const translationLayer = $("translation-layer");
 const captionTrack = $("caption-track");
 const timelineSummary = $("timeline-summary");
 const toast = $("toast");
+const captionEditor = $("caption-editor");
 
 let state = {
   project: {
@@ -44,7 +45,8 @@ let state = {
       arabic: { position: { x: 540, y: 894 }, fontSize: 310 },
       translation: { position: { x: 540, y: 1135 }, fontSize: 92 }
     },
-    overlays: []
+    overlays: [],
+    captionEdits: {}
   },
   hasVideo: false,
   hasAlignment: false,
@@ -63,6 +65,9 @@ let history = [];
 let redoHistory = [];
 let toastTimer = null;
 let timelineZoom = 1;
+let selectedCaptionIndex = null;
+let captionEditBefore = null;
+let timingDrag = null;
 
 function icon(button, symbol) {
   if (button) button.innerHTML = `<svg><use href="#${symbol}"/></svg>`;
@@ -121,6 +126,104 @@ async function api(path, options = {}) {
 
 function currentLayer() {
   return state.project.layout[selectedLayer];
+}
+
+function captionEventId(word, index) {
+  return `${word.verseKey}:${word.position}:${word.canonicalIndex}:${index}`;
+}
+
+function captionEditFor(index) {
+  const word = state.alignment?.words?.[index];
+  if (!word) return undefined;
+  return state.project.captionEdits?.[captionEventId(word, index)];
+}
+
+function effectiveWord(index) {
+  const word = state.alignment?.words?.[index];
+  if (!word) return undefined;
+  const edit = captionEditFor(index);
+  if (edit?.hidden) return undefined;
+  return {
+    ...word,
+    ...(edit?.arabic !== undefined ? { arabic: edit.arabic } : {}),
+    ...(edit?.wordTranslation !== undefined ? { wordTranslation: edit.wordTranslation } : {}),
+    ...(edit?.start !== undefined ? { start: edit.start } : {}),
+    ...(edit?.end !== undefined ? { end: edit.end } : {}),
+  };
+}
+
+function captionEntries() {
+  return (state.alignment?.words || []).flatMap((word, index) => {
+    const edited = effectiveWord(index);
+    return edited ? [{ word: edited, index, id: captionEventId(word, index) }] : [];
+  });
+}
+
+function selectedCaptionEntry() {
+  if (selectedCaptionIndex === null) return undefined;
+  const base = state.alignment?.words?.[selectedCaptionIndex];
+  const word = effectiveWord(selectedCaptionIndex);
+  if (!base) return undefined;
+  return { word: word || { ...base, ...(captionEditFor(selectedCaptionIndex) || {}) }, base, index: selectedCaptionIndex, id: captionEventId(base, selectedCaptionIndex) };
+}
+
+function updateCaptionEditor() {
+  if (!captionEditor) return;
+  const entry = selectedCaptionEntry();
+  captionEditor.classList.toggle("hidden", !entry);
+  if (!entry) return;
+  const edit = captionEditFor(entry.index);
+  $("caption-editor-title").textContent = `${entry.word.verseKey} · word ${entry.word.position}`;
+  $("caption-editor-meta").textContent = edit ? "Manual override" : "Automatic match";
+  $("caption-arabic").value = entry.word.arabic || "";
+  $("caption-translation").value = entry.word.wordTranslation || "";
+  $("caption-start").value = Number(entry.word.start).toFixed(2);
+  $("caption-end").value = Number(entry.word.end).toFixed(2);
+  $("caption-hide").textContent = edit?.hidden ? "Restore caption" : "Hide caption";
+  $("caption-reset").disabled = !edit;
+}
+
+function updateLocalCaptionEdit(field, value) {
+  const entry = selectedCaptionEntry();
+  if (!entry) return;
+  if (!state.project.captionEdits) state.project.captionEdits = {};
+  const current = state.project.captionEdits[entry.id] || {};
+  if (field === "start" || field === "end") {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return;
+    current[field] = Math.max(0, Math.min(Number(state.alignment?.durationSeconds || Infinity), number));
+  } else {
+    current[field] = String(value);
+  }
+  const baseValue = field === "arabic" ? entry.base.arabic : field === "wordTranslation" ? entry.base.wordTranslation : entry.base[field];
+  if (current[field] === baseValue) delete current[field];
+  if (!Object.keys(current).length) delete state.project.captionEdits[entry.id];
+  else state.project.captionEdits[entry.id] = current;
+}
+
+function refreshCaptionEditPreview() {
+  updateCaptionEditor();
+  renderTimeline();
+  updateStageGeometry();
+  renderCaption();
+}
+
+function commitCaptionEdit(before = captionEditBefore) {
+  captionEditBefore = null;
+  recordHistory(before);
+}
+
+function selectCaption(index, seek = true) {
+  commitCaptionEdit();
+  selectedCaptionIndex = index;
+  const entry = selectedCaptionEntry();
+  if (seek && entry && Number.isFinite(entry.word.start)) {
+    video.currentTime = entry.word.start;
+    updatePlayer();
+  }
+  updateCaptionEditor();
+  renderTimeline();
+  showTool("captions");
 }
 
 function syncControlsFromProject() {
@@ -216,7 +319,8 @@ function updateVideoStage() {
 }
 
 function renderCaption() {
-  const words = state.alignment?.words || [];
+  const entries = captionEntries();
+  const words = entries.map((entry) => entry.word);
   const now = video.currentTime || 0;
   let index = words.findIndex((word) => now >= word.start && now <= word.end);
   if (index < 0) index = words.findIndex((word) => now < word.end && now + 0.12 >= word.start);
@@ -249,8 +353,9 @@ function updatePlayer() {
   icon(playButton, video.paused ? "i-play" : "i-pause");
   document.querySelectorAll(".timeline-word").forEach((element) => {
     const index = Number(element.dataset.index);
-    const word = state.alignment?.words?.[index];
+    const word = effectiveWord(index);
     element.classList.toggle("active", Boolean(word && video.currentTime >= word.start && video.currentTime <= word.end));
+    element.classList.toggle("selected", selectedCaptionIndex === index);
   });
   renderCaption();
 }
@@ -259,7 +364,8 @@ function renderTimeline() {
   if (!captionTrack) return;
   captionTrack.style.width = `${timelineZoom * 100}%`;
   captionTrack.innerHTML = "";
-  const words = state.alignment?.words || [];
+  const entries = captionEntries();
+  const words = entries.map((entry) => entry.word);
   const duration = Number(state.alignment?.durationSeconds || video.duration || 0);
   if (!words.length || !duration) {
     captionTrack.innerHTML = '<div class="track-empty">Caption events will appear here.</div>';
@@ -269,21 +375,64 @@ function renderTimeline() {
   const fragment = document.createDocumentFragment();
   const ayahs = new Set(words.map((word) => word.verseKey));
   timelineSummary.textContent = `${words.length} matched words · ${ayahs.size} ayahs`;
-  words.forEach((word, index) => {
+  entries.forEach((entry) => {
+    const word = entry.word;
     const event = document.createElement("button");
     event.className = "timeline-word";
     event.type = "button";
-    event.dataset.index = String(index);
+    event.dataset.index = String(entry.index);
     event.title = `${word.verseKey} · ${word.arabic}`;
     event.style.left = `${Math.max(0, word.start / duration) * 100}%`;
     event.style.width = `${Math.max(.25, (word.end - word.start) / duration * 100)}%`;
+    event.innerHTML = '<span class="timeline-handle timeline-handle-start" aria-hidden="true"></span><span class="timeline-handle timeline-handle-end" aria-hidden="true"></span>';
+    event.querySelector(".timeline-handle-start").addEventListener("pointerdown", (pointerEvent) => beginTimingDrag(pointerEvent, entry.index, "start"));
+    event.querySelector(".timeline-handle-end").addEventListener("pointerdown", (pointerEvent) => beginTimingDrag(pointerEvent, entry.index, "end"));
     event.addEventListener("click", () => {
-      video.currentTime = word.start;
-      updatePlayer();
+      selectCaption(entry.index);
     });
     fragment.appendChild(event);
   });
   captionTrack.appendChild(fragment);
+}
+
+function beginTimingDrag(event, index, edge) {
+  event.preventDefault();
+  event.stopPropagation();
+  const word = effectiveWord(index);
+  if (!word) return;
+  selectedCaptionIndex = index;
+  timingDrag = {
+    index,
+    edge,
+    rect: captionTrack.getBoundingClientRect(),
+    duration: Number(state.alignment?.durationSeconds || video.duration || 0),
+    before: projectSnapshot(),
+  };
+  updateCaptionEditor();
+}
+
+function moveTimingDrag(event) {
+  if (!timingDrag) return;
+  const word = effectiveWord(timingDrag.index);
+  if (!word) return;
+  const ratio = Math.max(0, Math.min(1, (event.clientX - timingDrag.rect.left) / timingDrag.rect.width));
+  const time = ratio * timingDrag.duration;
+  const minimum = 0.01;
+  const next = timingDrag.edge === "start"
+    ? Math.min(time, word.end - minimum)
+    : Math.max(time, word.start + minimum);
+  updateLocalCaptionEdit(timingDrag.edge, Math.max(0, next));
+  updateCaptionEditor();
+  updatePlayer();
+}
+
+function endTimingDrag() {
+  if (!timingDrag) return;
+  const before = timingDrag.before;
+  timingDrag = null;
+  renderTimeline();
+  updateCaptionEditor();
+  recordHistory(before);
 }
 
 function renderOverlays() {
@@ -361,6 +510,7 @@ function renderState(next) {
   renderOverlays();
   syncOverlayControls();
   renderTimeline();
+  updateCaptionEditor();
   $("alignment-badge").textContent = state.hasAlignment ? "Ready" : state.job.status === "running" ? "Working…" : "Not transcribed";
   if (state.job.status === "running") setStatus(state.job.message || "Working locally…");
   else if (state.job.status === "error") setStatus(state.job.message || "Something went wrong.", true);
@@ -414,6 +564,7 @@ async function uploadVideo(file) {
 }
 
 async function transcribe() {
+  commitCaptionEdit();
   syncSettingsFromControls();
   setStatus("Starting local transcription…");
   try {
@@ -426,6 +577,7 @@ async function transcribe() {
 }
 
 async function exportOutput(burnVideo) {
+  commitCaptionEdit();
   syncSettingsFromControls();
   setStatus(burnVideo ? "Rendering the edited video with FFmpeg…" : "Generating edited ASS subtitles…");
   try {
@@ -562,6 +714,7 @@ async function uploadImage(file) {
 }
 
 function saveProject() {
+  commitCaptionEdit();
   syncSettingsFromControls();
   const blob = new Blob([JSON.stringify(state.project, null, 2)], { type: "application/json" });
   const link = document.createElement("a");
@@ -575,9 +728,11 @@ function saveProject() {
 async function loadProject(file) {
   if (!file) return;
   try {
+    commitCaptionEdit();
     const loaded = JSON.parse(await file.text());
     if (!loaded || loaded.schemaVersion !== 1 || !loaded.settings || !loaded.layout) throw new Error("Unsupported project file.");
     state.project = { ...state.project, ...loaded, videoPath: state.project.videoPath, videoName: state.project.videoName };
+    state.project.captionEdits ||= {};
     await api("/api/project", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(state.project) });
     renderState({ ...state, project: state.project });
     setStatus("Project loaded. Choose the matching video if it is not already open.");
@@ -690,6 +845,66 @@ function toggleTheme() {
   icon($("theme-toggle"), dark ? "i-moon" : "i-sun");
 }
 
+function startCaptionEditHistory() {
+  if (captionEditBefore === null) captionEditBefore = projectSnapshot();
+}
+
+function previewCaptionEdit() {
+  renderTimeline();
+  updateStageGeometry();
+  renderCaption();
+  updatePlayer();
+}
+
+function nudgeCaption(delta) {
+  const entry = selectedCaptionEntry();
+  if (!entry) return;
+  const before = projectSnapshot();
+  if (!state.project.captionEdits) state.project.captionEdits = {};
+  const edit = { ...(state.project.captionEdits[entry.id] || {}) };
+  const duration = Number(state.alignment?.durationSeconds || video.duration || 0);
+  const originalStart = Number(edit.start ?? entry.base.start);
+  const originalEnd = Number(edit.end ?? entry.base.end);
+  const length = Math.max(0.01, originalEnd - originalStart);
+  const start = Math.max(0, Math.min(Math.max(0, duration - length), originalStart + delta));
+  edit.start = start;
+  edit.end = Math.min(duration, start + length);
+  state.project.captionEdits[entry.id] = edit;
+  previewCaptionEdit();
+  updateCaptionEditor();
+  recordHistory(before);
+}
+
+function toggleCaptionHidden() {
+  const entry = selectedCaptionEntry();
+  if (!entry) return;
+  const before = projectSnapshot();
+  if (!state.project.captionEdits) state.project.captionEdits = {};
+  const edit = { ...(state.project.captionEdits[entry.id] || {}) };
+  edit.hidden = !edit.hidden;
+  state.project.captionEdits[entry.id] = edit;
+  previewCaptionEdit();
+  updateCaptionEditor();
+  recordHistory(before);
+}
+
+function resetCaptionEdit() {
+  const entry = selectedCaptionEntry();
+  if (!entry || !state.project.captionEdits?.[entry.id]) return;
+  const before = projectSnapshot();
+  delete state.project.captionEdits[entry.id];
+  previewCaptionEdit();
+  updateCaptionEditor();
+  recordHistory(before);
+}
+
+function closeCaptionEditor() {
+  commitCaptionEdit();
+  selectedCaptionIndex = null;
+  updateCaptionEditor();
+  renderTimeline();
+}
+
 video.addEventListener("loadedmetadata", () => {
   const width = video.videoWidth || 16;
   const height = video.videoHeight || 9;
@@ -713,6 +928,8 @@ for (const [name, element] of [["arabic", arabicLayer], ["translation", translat
 }
 document.addEventListener("pointermove", moveDrag);
 document.addEventListener("pointerup", endDrag);
+document.addEventListener("pointermove", moveTimingDrag);
+document.addEventListener("pointerup", endTimingDrag);
 window.addEventListener("resize", updateStageGeometry);
 
 document.querySelectorAll("[data-select-layer]").forEach((button) => button.addEventListener("click", () => {
@@ -728,6 +945,20 @@ $("timeline-zoom").addEventListener("click", () => {
   $("timeline-zoom").dataset.tooltip = `Timeline zoom ${timelineZoom}x`;
   renderTimeline();
 });
+$("caption-close").addEventListener("click", closeCaptionEditor);
+$("caption-shift-back").addEventListener("click", () => nudgeCaption(-0.05));
+$("caption-shift-forward").addEventListener("click", () => nudgeCaption(0.05));
+$("caption-hide").addEventListener("click", toggleCaptionHidden);
+$("caption-reset").addEventListener("click", resetCaptionEdit);
+for (const [id, field] of [["caption-arabic", "arabic"], ["caption-translation", "wordTranslation"], ["caption-start", "start"], ["caption-end", "end"]]) {
+  const input = $(id);
+  input.addEventListener("focus", startCaptionEditHistory);
+  input.addEventListener("input", () => {
+    updateLocalCaptionEdit(field, input.value);
+    previewCaptionEdit();
+  });
+  input.addEventListener("change", () => commitCaptionEdit());
+}
 $("choose-button").addEventListener("click", () => videoInput.click());
 $("drop-choose-button").addEventListener("click", () => videoInput.click());
 videoInput.addEventListener("change", () => uploadVideo(videoInput.files?.[0]));

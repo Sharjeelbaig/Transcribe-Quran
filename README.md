@@ -102,8 +102,11 @@ the browser. The editor previews synchronized Qur'an captions, lets you drag
 caption layers, resize them, change the current caption settings, search
 installed/bundled fonts, import local `.ttf`, `.otf`, `.woff`, or `.woff2`
 fonts, save a project file, add text/image overlays, and export ASS subtitles
-or a rendered MP4. Use `--port <number>` to choose a port and `--no-open` to
-keep the browser from opening automatically.
+or a rendered MP4. Click any word on the caption timeline to manually edit its
+Arabic text, translation, timing, visibility, or restore the automatic match;
+drag the edges of a timeline block for precise timing changes. Use
+`--port <number>` to choose a port and `--no-open` to keep the browser from
+opening automatically.
 
 ## How matching works
 

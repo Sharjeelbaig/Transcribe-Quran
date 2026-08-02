@@ -123,6 +123,10 @@ svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-lineca
 .track-empty { padding: 13px; color: var(--faint); font-size: 11px; }
 .timeline-word { position: absolute; top: 7px; bottom: 7px; min-width: 2px; border-radius: 3px; background: var(--accent-soft); }
 .timeline-word:hover, .timeline-word.active { background: var(--accent); }
+.timeline-word.selected { outline: 2px solid var(--text); outline-offset: 1px; }
+.timeline-handle { position: absolute; top: 0; bottom: 0; z-index: 2; width: 7px; cursor: ew-resize; }
+.timeline-handle-start { left: 0; }
+.timeline-handle-end { right: 0; }
 .status { min-height: 18px; margin: 7px 0 0; color: var(--muted); font-size: 11px; }
 .status.error { color: var(--danger); }
 .inspector { min-width: 0; padding: 21px 18px 30px; border-left: 1px solid var(--border); background: var(--surface); }
@@ -133,8 +137,9 @@ svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-lineca
 .help-mark { display: inline-grid; width: 16px; height: 16px; place-items: center; border: 1px solid currentColor; border-radius: 50%; font-size: 10px; }
 label, .field-label { display: grid; gap: 6px; margin-top: 13px; color: var(--muted); font-size: 11px; font-weight: 550; }
 .field-label-row { justify-content: space-between; margin-top: 13px; color: var(--muted); font-size: 11px; font-weight: 550; }
-input, select { width: 100%; min-height: 34px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--text); outline: none; }
-input:focus, select:focus, .font-trigger:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent-soft); outline-offset: 1px; }
+input, select, textarea { width: 100%; min-height: 34px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--text); outline: none; }
+textarea { min-height: 58px; resize: vertical; line-height: 1.35; }
+input:focus, select:focus, textarea:focus, .font-trigger:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent-soft); outline-offset: 1px; }
 input[type="number"] { font-variant-numeric: tabular-nums; }
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .checkbox-row { display: flex; grid-template-columns: auto 1fr; align-items: center; gap: 7px; }
@@ -161,6 +166,9 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 .button-row { display: flex; gap: 6px; }
 .button-row .button { flex: 1; }
 .subsection { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.caption-editor { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+.caption-editor-title { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; font-weight: 500; }
+.caption-editor-meta { margin-top: -8px; color: var(--faint); font-size: 10px; }
 .subsection-heading { justify-content: space-between; font-size: 11px; }
 .text-button { padding: 0; border: 0; background: transparent; color: var(--danger); font-size: 10px; }
 .project-actions { display: grid; gap: 8px; margin-top: 25px; padding-top: 18px; border-top: 1px solid var(--border); }

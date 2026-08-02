@@ -13,11 +13,13 @@ import { buildQuranIndex, loadQuranCorpus } from "../quran/corpus.js";
 import { bundledFontDirectory, renderCaptionedVideo, type ImageOverlay } from "../video/render.js";
 import type { AlignmentDocument, TranslationKey } from "../types.js";
 import {
+  applyCaptionEdits,
   createEmptyProject,
   defaultCaptionLayerPositions,
   DESIGN_HEIGHT,
   DESIGN_WIDTH,
   projectWithVideo,
+  type UiCaptionEdit,
   type UiCaptionSettings,
   type UiProject,
   type UiOverlay,
@@ -233,6 +235,26 @@ function numeric(value: unknown, label: string, minimum: number): number {
   return number;
 }
 
+function captionEdits(value: unknown): UiProject["captionEdits"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const edits: UiProject["captionEdits"] = {};
+  for (const [id, raw] of Object.entries(value as Record<string, unknown>).slice(0, 10000)) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const input = raw as Record<string, unknown>;
+    const edit: UiCaptionEdit = {};
+    if (typeof input.arabic === "string") edit.arabic = input.arabic.slice(0, 2000);
+    if (typeof input.wordTranslation === "string") edit.wordTranslation = input.wordTranslation.slice(0, 2000);
+    for (const key of ["start", "end"] as const) {
+      if (input[key] === undefined) continue;
+      const number = Number(input[key]);
+      if (Number.isFinite(number) && number >= 0) edit[key] = number;
+    }
+    if (input.hidden !== undefined) edit.hidden = Boolean(input.hidden);
+    if (Object.keys(edit).length) edits[id.slice(0, 256)] = edit;
+  }
+  return edits;
+}
+
 function mergeSettings(base: UiCaptionSettings, incoming: Partial<UiCaptionSettings>): UiCaptionSettings {
   const next: UiCaptionSettings = {
     ...base,
@@ -331,6 +353,7 @@ function bodyProject(base: UiProject, incoming: unknown): UiProject {
       },
     },
     overlays: Array.isArray(value.overlays) ? value.overlays.slice(0, 100) : [],
+    captionEdits: captionEdits(value.captionEdits),
   };
   return next;
 }
@@ -393,6 +416,7 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
     }
     job = { status: "running", message: "Transcribing locally and matching Qur'an words…" };
     alignment = undefined;
+    project.captionEdits = {};
     try {
       await rm(alignmentPath, { force: true });
       await rm(subtitlePath, { force: true });
@@ -427,10 +451,11 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
   const exportProject = async (burnVideo: boolean): Promise<void> => {
     const currentAlignment = await readAlignment();
     if (!currentAlignment || !project.videoPath) throw new Error("Transcribe a video before exporting.");
+    const editedAlignment = applyCaptionEdits(currentAlignment, project.captionEdits);
     const corpus = await loadQuranCorpus();
     const index = buildQuranIndex(corpus);
     const settings = project.settings;
-    let ass = createAss(currentAlignment.words, index, settings.wordsPerCaption, {
+    let ass = createAss(editedAlignment.words, index, settings.wordsPerCaption, {
       arabicFontName: settings.arabicFontName,
       translationFontName: settings.translationFontName,
       arabicFontSize: project.layout.arabic.fontSize,
@@ -439,7 +464,7 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
       arabicPosition: project.layout.arabic.position,
       translationPosition: project.layout.translation.position,
     });
-    ass = withTextOverlays(ass, project.overlays, currentAlignment.durationSeconds);
+    ass = withTextOverlays(ass, project.overlays, editedAlignment.durationSeconds);
     await writeFile(subtitlePath, ass, "utf8");
     lastOutput = { subtitles: subtitlePath };
     if (burnVideo) {
@@ -520,6 +545,7 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
         const information = await stat(destination);
         if (information.size > MAX_UPLOAD_BYTES) throw new Error("Video upload is too large.");
         project = projectWithVideo(project, { path: destination, name: filename });
+        project.captionEdits = {};
         alignment = undefined;
         lastOutput = {};
         await rm(alignmentPath, { force: true });
