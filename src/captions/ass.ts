@@ -66,7 +66,7 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Quran,Noto Naskh Arabic,88,&H00FFFFFF,&H0000D7FF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,1,4,1,3,70,70,170,1
+Style: Quran,Noto Naskh Arabic,88,&H00FFFFFF,&H0000D7FF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,1,4,1,2,70,70,170,1
 Style: Translation,Arial,34,&H00FFFFFF,&H00FFFFFF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,1,3,1,2,90,90,105,1
 
 [Events]

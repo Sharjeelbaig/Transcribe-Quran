@@ -1,10 +1,14 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { processVideo } from "./pipeline.js";
 import { DEFAULT_MODEL } from "./model/transcriber.js";
 import type { ProcessOptions, TranslationKey } from "./types.js";
 
-const VERSION = "1.0.3";
+const packageMetadata = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+) as { version: string };
+const VERSION = packageMetadata.version;
 const TRANSLATIONS: TranslationKey[] = [
   "saheehInternational",
   "abdulHaleem",
