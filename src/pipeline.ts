@@ -2,6 +2,7 @@ import { access, copyFile, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, parse, resolve } from "node:path";
 import { assertFfmpeg, durationSeconds, extractPcmAudio, readFloat32Pcm } from "./audio/audio.js";
+import { refineFinalWordTimings } from "./audio/timing.js";
 import { createAss } from "./captions/ass.js";
 import { transcribeAudio } from "./model/transcriber.js";
 import { buildQuranIndex, loadQuranCorpus } from "./quran/corpus.js";
@@ -76,7 +77,11 @@ export async function processVideo(options: ProcessOptions): Promise<ProcessResu
       console.error(`Matcher window scores: ${match.windowScores.map((score) => score.toFixed(3)).join(", ")}`);
       console.error(`Unmatched windows: ${match.unmatchedWindows}`);
     }
-    const words = materializeAlignedWords(match.matched, index, options.translation);
+    const words = refineFinalWordTimings(
+      materializeAlignedWords(match.matched, index, options.translation),
+      index,
+      audio,
+    );
     if (!words.length) {
       throw new Error(
         "No Qur'anic passage passed the confidence threshold. The program refused to create potentially incorrect captions.",

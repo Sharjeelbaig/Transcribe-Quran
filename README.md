@@ -95,7 +95,9 @@ translations always come from `quran.json`.
 Whisper timestamp outliers are rejected when a single word spans an impossible
 portion of an inference window. Missing-word timing is inferred only across
 short, plausible gaps; long pauses are left uncaptioned so a previous verse
-cannot bleed into the next passage.
+cannot bleed into the next passage. Final ayah words are additionally checked
+against the local audio tail so elongated endings such as `ٱلضَّآلِّينَ` do not
+disappear before the reciter finishes.
 
 Matching is deliberately confidence-gated. If the audio is not Qur'an, is too
 unclear, or is too ambiguous, the command refuses to create captions rather

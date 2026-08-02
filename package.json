@@ -1,6 +1,6 @@
 {
   "name": "transcribe-quran",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Fully local Qur'an-aware transcription and word-by-word video captions.",
   "type": "module",
   "bin": {
