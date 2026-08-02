@@ -1,0 +1,52 @@
+{
+  "name": "transcribe-quran",
+  "version": "1.0.0",
+  "description": "Fully local Qur'an-aware transcription and word-by-word video captions.",
+  "type": "module",
+  "bin": {
+    "transcribe-quran": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "assets",
+    "quran.json",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepack": "npm run check && npm test && npm run build"
+  },
+  "keywords": [
+    "quran",
+    "arabic",
+    "transcription",
+    "captions",
+    "whisper",
+    "offline"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@huggingface/transformers": "4.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.2",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  },
+  "overrides": {
+    "adm-zip": "0.6.0",
+    "esbuild": "0.28.1",
+    "sharp": "0.35.3"
+  }
+}

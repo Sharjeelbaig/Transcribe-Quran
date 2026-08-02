@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+*.tmp
+*.tgz
+.cache/
+models/
+model-build/
+*.quran-audio.f32le
+*.quran-captions.ass
+*.quran-alignment.json
+*.transcribed.mp4

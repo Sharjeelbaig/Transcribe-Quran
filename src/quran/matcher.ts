@@ -1,0 +1,287 @@
+import type {
+  AlignedWord,
+  MatchedTranscriptWord,
+  TranscriptWord,
+  TranslationKey,
+} from "../types.js";
+import type { QuranIndex } from "./corpus.js";
+import { stringSimilarity } from "./similarity.js";
+
+interface CandidateAlignment {
+  start: number;
+  end: number;
+  confidence: number;
+  score: number;
+  mappings: Array<{ transcriptIndex: number; canonicalIndex: number; similarity: number }>;
+}
+
+const WINDOW_WORDS = 36;
+const MAX_POSTINGS_PER_TOKEN = 512;
+const MAX_CANDIDATES = 36;
+
+function candidateStarts(tokens: TranscriptWord[], index: QuranIndex, expected?: number): number[] {
+  const votes = new Map<number, number>();
+  if (expected !== undefined) votes.set(expected, 10);
+
+  tokens.forEach((token, transcriptIndex) => {
+    const postings = index.postings.get(token.normalized);
+    if (!postings?.length || postings.length > MAX_POSTINGS_PER_TOKEN) return;
+    const weight = 1 / Math.log2(postings.length + 2);
+    for (const position of postings) {
+      const start = position - transcriptIndex;
+      votes.set(start, (votes.get(start) ?? 0) + weight);
+    }
+  });
+
+  if (!votes.size) {
+    // A Quran-specific recognizer should normally produce exact anchors. This
+    // limited fuzzy fallback avoids scanning all 77k words for every token.
+    for (let transcriptIndex = 0; transcriptIndex < tokens.length; transcriptIndex += 1) {
+      const token = tokens[transcriptIndex];
+      if (!token || token.normalized.length < 4) continue;
+      let found = 0;
+      for (const [canonical, postings] of index.postings) {
+        if (canonical[0] !== token.normalized[0] || Math.abs(canonical.length - token.normalized.length) > 2) {
+          continue;
+        }
+        if (stringSimilarity(token.normalized, canonical) < 0.72) continue;
+        for (const position of postings.slice(0, 20)) {
+          votes.set(position - transcriptIndex, (votes.get(position - transcriptIndex) ?? 0) + 0.25);
+        }
+        found += 1;
+        if (found >= 8) break;
+      }
+    }
+  }
+
+  return [...votes.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, MAX_CANDIDATES)
+    .map(([start]) => Math.max(0, Math.min(index.words.length - 1, start)));
+}
+
+function alignCandidate(
+  transcript: TranscriptWord[],
+  index: QuranIndex,
+  candidateStart: number,
+  expected?: number,
+): CandidateAlignment {
+  const sliceStart = Math.max(0, candidateStart - 5);
+  const sliceEnd = Math.min(index.words.length, candidateStart + transcript.length + 12);
+  const canonical = index.words.slice(sliceStart, sliceEnd);
+  const rows = transcript.length + 1;
+  const columns = canonical.length + 1;
+  const costs = new Float64Array(rows * columns);
+  const back = new Uint8Array(rows * columns);
+  const at = (row: number, column: number) => row * columns + column;
+
+  for (let column = 0; column < columns; column += 1) costs[at(0, column)] = 0;
+  for (let row = 1; row < rows; row += 1) {
+    costs[at(row, 0)] = row * 0.8;
+    back[at(row, 0)] = 1;
+  }
+
+  for (let row = 1; row < rows; row += 1) {
+    for (let column = 1; column < columns; column += 1) {
+      const transcriptWord = transcript[row - 1];
+      const canonicalWord = canonical[column - 1];
+      if (!transcriptWord || !canonicalWord) continue;
+      const similarity = stringSimilarity(transcriptWord.normalized, canonicalWord.normalized);
+      const diagonal = (costs[at(row - 1, column - 1)] ?? Number.POSITIVE_INFINITY) + (1 - similarity);
+      const dropTranscript = (costs[at(row - 1, column)] ?? Number.POSITIVE_INFINITY) + 0.8;
+      const missedCanonical = (costs[at(row, column - 1)] ?? Number.POSITIVE_INFINITY) + 0.58;
+      const minimum = Math.min(diagonal, dropTranscript, missedCanonical);
+      costs[at(row, column)] = minimum;
+      back[at(row, column)] = minimum === diagonal ? 0 : minimum === dropTranscript ? 1 : 2;
+    }
+  }
+
+  let endColumn = 0;
+  let minimumCost = Number.POSITIVE_INFINITY;
+  for (let column = 1; column < columns; column += 1) {
+    const cost = costs[at(rows - 1, column)] ?? Number.POSITIVE_INFINITY;
+    if (cost < minimumCost) {
+      minimumCost = cost;
+      endColumn = column;
+    }
+  }
+
+  let row = rows - 1;
+  let column = endColumn;
+  const mappings: CandidateAlignment["mappings"] = [];
+  while (row > 0 && column >= 0) {
+    const direction = back[at(row, column)];
+    if (column > 0 && direction === 0) {
+      const transcriptWord = transcript[row - 1];
+      const canonicalWord = canonical[column - 1];
+      if (transcriptWord && canonicalWord) {
+        const similarity = stringSimilarity(transcriptWord.normalized, canonicalWord.normalized);
+        if (similarity >= 0.3) {
+          mappings.push({
+            transcriptIndex: row - 1,
+            canonicalIndex: sliceStart + column - 1,
+            similarity,
+          });
+        }
+      }
+      row -= 1;
+      column -= 1;
+    } else if (direction === 1 || column === 0) {
+      row -= 1;
+    } else {
+      column -= 1;
+    }
+  }
+  mappings.reverse();
+
+  const similarityTotal = mappings.reduce((total, mapping) => total + mapping.similarity, 0);
+  const coverage = mappings.length / Math.max(1, transcript.length);
+  const averageSimilarity = similarityTotal / Math.max(1, mappings.length);
+  const confidence = coverage * averageSimilarity;
+  const actualStart = mappings[0]?.canonicalIndex ?? candidateStart;
+  const continuityBonus =
+    expected === undefined ? 0 : Math.max(-0.08, 0.08 - Math.abs(actualStart - expected) * 0.004);
+
+  return {
+    start: actualStart,
+    end: mappings.at(-1)?.canonicalIndex ?? actualStart,
+    confidence,
+    score: confidence + continuityBonus,
+    mappings,
+  };
+}
+
+export interface MatchResult {
+  matched: MatchedTranscriptWord[];
+  unmatchedWindows: number;
+  windowScores: number[];
+}
+
+export function matchTranscript(
+  transcript: TranscriptWord[],
+  index: QuranIndex,
+  confidenceThreshold = 0.58,
+): MatchResult {
+  const matched: MatchedTranscriptWord[] = [];
+  const windowScores: number[] = [];
+  let unmatchedWindows = 0;
+  let expectedCanonical: number | undefined;
+
+  for (let offset = 0; offset < transcript.length; offset += WINDOW_WORDS) {
+    const window = transcript.slice(offset, offset + WINDOW_WORDS);
+    if (!window.length) continue;
+    const starts = candidateStarts(window, index, expectedCanonical);
+    const uniqueCandidates = new Map<string, CandidateAlignment>();
+    for (const start of starts) {
+      const candidate = alignCandidate(window, index, start, expectedCanonical);
+      const key = `${candidate.start}:${candidate.end}`;
+      const existing = uniqueCandidates.get(key);
+      if (!existing || candidate.score > existing.score) uniqueCandidates.set(key, candidate);
+    }
+    const candidates = [...uniqueCandidates.values()];
+    candidates.sort((a, b) => b.score - a.score);
+    const best = candidates[0];
+    const second = candidates[1];
+
+    if (!best || best.confidence < confidenceThreshold) {
+      unmatchedWindows += 1;
+      expectedCanonical = undefined;
+      windowScores.push(best?.confidence ?? 0);
+      continue;
+    }
+
+    // With no preceding context, two equally good locations are genuinely
+    // ambiguous even when every recognized word is exact. Never choose one
+    // merely because it appears first in the corpus.
+    const margin = best.score - (second?.score ?? 0);
+    if (margin < 0.015 && expectedCanonical === undefined) {
+      unmatchedWindows += 1;
+      windowScores.push(best.confidence);
+      continue;
+    }
+
+    for (const mapping of best.mappings) {
+      const source = window[mapping.transcriptIndex];
+      if (!source) continue;
+      matched.push({
+        ...source,
+        canonicalIndex: mapping.canonicalIndex,
+        matchConfidence: mapping.similarity * best.confidence,
+      });
+    }
+    expectedCanonical = best.end + 1;
+    windowScores.push(best.confidence);
+  }
+
+  return { matched, unmatchedWindows, windowScores };
+}
+
+function toAlignedWord(
+  source: MatchedTranscriptWord,
+  index: QuranIndex,
+  translation: TranslationKey,
+): AlignedWord | null {
+  const canonical = index.words[source.canonicalIndex];
+  if (!canonical) return null;
+  return {
+    start: source.start,
+    end: Math.max(source.start + 0.02, source.end),
+    surah: canonical.surah,
+    verse: canonical.verse,
+    verseKey: canonical.verseKey,
+    position: canonical.position,
+    arabic: canonical.word.text.uthmani,
+    imlaei: canonical.word.text.imlaei,
+    wordTranslation: canonical.word.translation,
+    verseTranslation: canonical.verseData.translations[translation],
+    confidence: Math.max(0, Math.min(1, source.matchConfidence * (source.confidence ?? 1))),
+    inferredTiming: false,
+    canonicalIndex: source.canonicalIndex,
+  };
+}
+
+export function materializeAlignedWords(
+  matched: MatchedTranscriptWord[],
+  index: QuranIndex,
+  translation: TranslationKey,
+): AlignedWord[] {
+  const direct = matched
+    .map((word) => toAlignedWord(word, index, translation))
+    .filter((word): word is AlignedWord => word !== null)
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  const output: AlignedWord[] = [];
+  for (const current of direct) {
+    const previous = output.at(-1);
+    if (previous) {
+      const missingCount = current.canonicalIndex - previous.canonicalIndex - 1;
+      const availableTime = current.start - previous.end;
+      if (missingCount > 0 && missingCount <= 5 && availableTime >= missingCount * 0.06) {
+        const duration = availableTime / missingCount;
+        for (let missing = 1; missing <= missingCount; missing += 1) {
+          const canonicalIndex = previous.canonicalIndex + missing;
+          const canonical = index.words[canonicalIndex];
+          if (!canonical) continue;
+          output.push({
+            start: previous.end + duration * (missing - 1),
+            end: previous.end + duration * missing,
+            surah: canonical.surah,
+            verse: canonical.verse,
+            verseKey: canonical.verseKey,
+            position: canonical.position,
+            arabic: canonical.word.text.uthmani,
+            imlaei: canonical.word.text.imlaei,
+            wordTranslation: canonical.word.translation,
+            verseTranslation: canonical.verseData.translations[translation],
+            confidence: Math.min(previous.confidence, current.confidence) * 0.65,
+            inferredTiming: true,
+            canonicalIndex,
+          });
+        }
+      }
+    }
+    output.push(current);
+  }
+
+  return output;
+}
