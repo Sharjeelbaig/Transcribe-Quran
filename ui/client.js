@@ -1,3 +1,5 @@
+import { findActiveCaptionIndex } from "./caption-timing.js";
+
 const DESIGN_WIDTH = 1080;
 const DESIGN_HEIGHT = 1920;
 
@@ -322,25 +324,23 @@ function renderCaption() {
   const entries = captionEntries();
   const words = entries.map((entry) => entry.word);
   const now = video.currentTime || 0;
-  let index = words.findIndex((word) => now >= word.start && now <= word.end);
-  if (index < 0) index = words.findIndex((word) => now < word.end && now + 0.12 >= word.start);
-  if (!words.length) {
+  const index = findActiveCaptionIndex(words, now);
+  if (!words.length || index < 0) {
     activeCaption = null;
     arabicLayer.classList.add("hidden");
     translationLayer.classList.add("hidden");
     return;
   }
-  const live = index >= 0;
-  const current = live ? words[index] : words[0];
+  const current = words[index];
   const count = Math.max(1, Number(state.project.settings.wordsPerCaption) || 1);
   const groupStart = Math.floor((Math.max(1, current.position) - 1) / count) * count + 1;
   const groupEnd = groupStart + count - 1;
   const group = words.filter((word) => word.verseKey === current.verseKey && word.position >= groupStart && word.position <= groupEnd);
-  activeCaption = { current, group, preview: !live };
+  activeCaption = { current, group };
   arabicLayer.classList.remove("hidden");
   translationLayer.classList.remove("hidden");
   const ordered = group.slice().sort((left, right) => right.position - left.position);
-  arabicLayer.querySelector(".caption-content").innerHTML = `<span class="arabic-line">${ordered.map((word) => `<span class="arabic-word${live && word.position === current.position ? " active" : ""}">${escapeHtml(word.arabic)}</span>`).join("")}</span>`;
+  arabicLayer.querySelector(".caption-content").innerHTML = `<span class="arabic-line">${ordered.map((word) => `<span class="arabic-word${word.position === current.position ? " active" : ""}">${escapeHtml(word.arabic)}</span>`).join("")}</span>`;
   translationLayer.querySelector(".caption-content").textContent = `${current.wordTranslation}  •  ${current.verseKey}`;
   updateStageGeometry();
 }
