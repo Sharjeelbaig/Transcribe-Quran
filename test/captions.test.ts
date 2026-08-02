@@ -29,8 +29,8 @@ describe("ASS caption generation", () => {
     };
     const ass = createAss([word], index);
 
-    expect(ass).toContain("Noto Naskh Arabic");
-    expect(ass).toContain("Style: Quran,Noto Naskh Arabic,88,&H00FFFFFF,&H0000D7FF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,1,4,1,5,");
+    expect(ass).toContain("Amiri Quran");
+    expect(ass).toContain("Style: Quran,Amiri Quran,310,&H00FFFFFF,&H0000D7FF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,1,4,1,5,");
     expect(ass).toContain("{\\an5\\pos(540,900)}");
     expect(ass).toContain("{\\an5\\pos(540,1020)}In (the) name");
     expect(ass).toContain("{\\c&H0000D7FF&\\b1}\u2067بِسْمِ\u2069");
@@ -72,7 +72,7 @@ describe("ASS caption generation", () => {
   it("accepts user-selected Arabic and English font sizes", () => {
     const ass = createAss([], index, 1, { arabicFontSize: 110, translationFontSize: 42 });
 
-    expect(ass).toContain("Style: Quran,Noto Naskh Arabic,110,");
+    expect(ass).toContain("Style: Quran,Amiri Quran,110,");
     expect(ass).toContain("Style: Translation,Arial,42,");
   });
 
@@ -82,8 +82,8 @@ describe("ASS caption generation", () => {
       translationFontName: "Georgia",
     });
 
-    expect(ass).toContain("Style: Quran,Amiri,88,");
-    expect(ass).toContain("Style: Translation,Georgia,34,");
+    expect(ass).toContain("Style: Quran,Amiri,310,");
+    expect(ass).toContain("Style: Translation,Georgia,92,");
   });
 
   it("rejects font names that would corrupt the ASS style format", () => {

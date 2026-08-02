@@ -26,9 +26,9 @@ function isolatedArabic(value: string): string {
 const CAPTION_CENTER_X = 540;
 const QURAN_CENTER_Y = 900;
 const TRANSLATION_CENTER_Y = 1020;
-export const DEFAULT_ARABIC_FONT_SIZE = 88;
-export const DEFAULT_TRANSLATION_FONT_SIZE = 34;
-export const DEFAULT_ARABIC_FONT_NAME = "Noto Naskh Arabic";
+export const DEFAULT_ARABIC_FONT_SIZE = 310;
+export const DEFAULT_TRANSLATION_FONT_SIZE = 92;
+export const DEFAULT_ARABIC_FONT_NAME = "Amiri Quran";
 export const DEFAULT_TRANSLATION_FONT_NAME = "Arial";
 
 export interface AssOptions {

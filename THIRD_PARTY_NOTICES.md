@@ -18,8 +18,11 @@ base model in its model card.
 
 ## Font
 
-Noto Naskh Arabic is distributed under the SIL Open Font License 1.1. The full
-font license is included at `assets/fonts/OFL.txt`.
+The default `Amiri Quran` font is from the [Amiri project](https://github.com/aliftype/amiri)
+and is distributed under the SIL Open Font License 1.1. Its full license is
+included at `assets/fonts/Amiri-OFL.txt`. The bundled Noto Naskh Arabic fallback
+is also distributed under the SIL Open Font License 1.1; its license is included
+at `assets/fonts/OFL.txt`.
 
 ## Runtime libraries
 

@@ -85,9 +85,9 @@ to the left. The Arabic and English caption pair is centered horizontally and
 vertically in the video by default.
 
 Use `--font-size` for Arabic and `--translation-font-size` for English. The
-defaults are 88 and 34 respectively. Use `--font` and `--translation-font` to
-choose font families; the defaults are Noto Naskh Arabic and Arial. The font
-must be installed on the system or available in the renderer's fonts directory.
+defaults are 310 and 92 respectively. Use `--font` and `--translation-font` to
+choose font families; the defaults are Amiri Quran and Arial. The font must be
+installed on the system or available in the renderer's fonts directory.
 
 ## How matching works
 
