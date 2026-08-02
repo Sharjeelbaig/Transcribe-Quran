@@ -7,10 +7,12 @@ on the local machine.
 npx transcribe-quran ./video.mp4
 ```
 
-The command extracts the video's audio with FFmpeg, transcribes it with the
-Qur'an-tuned Tarteel Whisper model, matches the recognized words against the
-bundled canonical Qur'an, creates an alignment JSON and RTL ASS subtitles, then
-burns the captions into a new video.
+The command extracts the video's audio with FFmpeg, transcribes short
+overlapping windows with the Qur'an-tuned Tarteel Whisper model, matches the
+recognized words against the bundled canonical Qur'an, creates an alignment
+JSON and RTL ASS subtitles, then burns the captions into a new video. Short
+windows make the recognizer substantially more reliable for slow, highly
+melodic reciters such as Abdul Basit.
 
 No OpenAI key, cloud transcription service, Python runtime, Qari selection, or
 manual verse selection is required. The model is downloaded from Hugging Face

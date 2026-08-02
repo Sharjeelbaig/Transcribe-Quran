@@ -4,7 +4,7 @@ import { processVideo } from "./pipeline.js";
 import { DEFAULT_MODEL } from "./model/transcriber.js";
 import type { ProcessOptions, TranslationKey } from "./types.js";
 
-const VERSION = "1.0.0";
+const VERSION = "1.0.1";
 const TRANSLATIONS: TranslationKey[] = [
   "saheehInternational",
   "abdulHaleem",
@@ -27,7 +27,7 @@ Options:
       --model <id-or-path>    Transformers.js ONNX model (${DEFAULT_MODEL})
       --dtype <q8|q4|fp32>    Model precision (q8)
       --translation <name>    Verse translation (saheehInternational)
-      --confidence <0..1>     Minimum passage match confidence (0.58)
+      --confidence <0..1>     Minimum passage match confidence (0.50)
       --offline               Forbid all network model access
       --no-burn               Only create alignment JSON and ASS subtitles
       --keep-temp             Retain extracted audio and temporary files
@@ -55,7 +55,7 @@ async function main(): Promise<void> {
       model: { type: "string", default: DEFAULT_MODEL },
       dtype: { type: "string", default: "q8" },
       translation: { type: "string", default: "saheehInternational" },
-      confidence: { type: "string", default: "0.58" },
+      confidence: { type: "string", default: "0.50" },
       offline: { type: "boolean", default: false },
       "no-burn": { type: "boolean", default: false },
       "keep-temp": { type: "boolean", default: false },

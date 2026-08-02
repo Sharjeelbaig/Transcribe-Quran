@@ -16,6 +16,13 @@ interface PipelineResult {
   chunks?: PipelineChunk[];
 }
 
+interface AsrPipeline {
+  (
+    audio: Float32Array,
+    options: { language: string; task: string; return_timestamps: "word" },
+  ): Promise<PipelineResult>;
+}
+
 function defaultCacheDirectory(): string {
   const home = homedir();
   if (platform() === "darwin") return join(home, "Library", "Caches", "transcribe-quran");
@@ -36,13 +43,32 @@ function timestampPair(chunk: PipelineChunk, fallbackStart: number, fallbackEnd:
   return [Math.max(0, start), Math.max(start + 0.02, end)];
 }
 
-function chunksToWords(chunks: PipelineChunk[]): TranscriptWord[] {
+function chunksToWords(chunks: PipelineChunk[], windowDuration?: number): TranscriptWord[] {
   const words: TranscriptWord[] = [];
-  for (const chunk of chunks) {
+  for (const [chunkIndex, originalChunk] of chunks.entries()) {
+    let chunk = originalChunk;
     const raw = chunk.text?.trim() ?? "";
     const pieces = splitNormalizedArabic(raw);
     if (!pieces.length) continue;
-    const [start, end] = timestampPair(chunk, words.at(-1)?.end ?? 0, (words.at(-1)?.end ?? 0) + 0.5);
+    const reportedStart = chunk.timestamp?.[0];
+    const reportedEnd = chunk.timestamp?.[1];
+    const invalidEnd =
+      reportedEnd === null ||
+      reportedEnd === undefined ||
+      reportedEnd <= (reportedStart ?? 0);
+    if (invalidEnd && chunks.length === 1 && windowDuration !== undefined) {
+      const center = windowDuration / 2;
+      chunk = {
+        ...chunk,
+        timestamp: [Math.max(0, center - 1), Math.min(windowDuration, center + 1)],
+      };
+    }
+    const previousEnd = words.at(-1)?.end ?? 0;
+    const fallbackEnd =
+      chunkIndex === chunks.length - 1 && windowDuration !== undefined
+        ? Math.min(windowDuration, (chunk.timestamp?.[0] ?? previousEnd) + 2.5)
+        : previousEnd + 0.5;
+    const [start, end] = timestampPair(chunk, previousEnd, fallbackEnd);
     const duration = Math.max(0.02, (end - start) / pieces.length);
     pieces.forEach((normalized, index) => {
       words.push({
@@ -54,6 +80,61 @@ function chunksToWords(chunks: PipelineChunk[]): TranscriptWord[] {
     });
   }
   return words;
+}
+
+const WINDOW_SECONDS = 9;
+const WINDOW_HOP_SECONDS = 6;
+
+async function transcribeInShortWindows(
+  transcriber: AsrPipeline,
+  audio: Float32Array,
+): Promise<TranscriptionResult> {
+  const duration = audio.length / 16_000;
+  const overlap = WINDOW_SECONDS - WINDOW_HOP_SECONDS;
+  const words: TranscriptWord[] = [];
+
+  for (let windowStart = 0; windowStart < duration; windowStart += WINDOW_HOP_SECONDS) {
+    const windowEnd = Math.min(duration, windowStart + WINDOW_SECONDS);
+    const windowDuration = windowEnd - windowStart;
+    const sampleStart = Math.floor(windowStart * 16_000);
+    const sampleEnd = Math.min(audio.length, Math.ceil(windowEnd * 16_000));
+    const result = (await transcriber(audio.slice(sampleStart, sampleEnd), {
+      language: "ar",
+      task: "transcribe",
+      return_timestamps: "word",
+    })) as PipelineResult;
+
+    let localWords = chunksToWords(result.chunks ?? [], windowDuration);
+    if (!localWords.length && result.text) {
+      const pieces = splitNormalizedArabic(result.text);
+      const secondsPerWord = windowDuration / Math.max(1, pieces.length);
+      localWords = pieces.map((normalized, index) => ({
+        text: normalized,
+        normalized,
+        start: index * secondsPerWord,
+        end: (index + 1) * secondsPerWord,
+      }));
+    }
+
+    // Each overlapping window owns its middle region. Keeping only that
+    // region removes duplicate words while still giving the recognizer audio
+    // context on both sides of every boundary.
+    const ownedStart = windowStart === 0 ? 0 : windowStart + overlap / 2;
+    const ownedEnd = windowEnd >= duration ? duration : windowEnd - overlap / 2;
+    for (const word of localWords) {
+      const midpoint = windowStart + (word.start + word.end) / 2;
+      if (midpoint < ownedStart || midpoint >= ownedEnd) continue;
+      words.push({
+        ...word,
+        start: windowStart + word.start,
+        end: Math.min(duration, windowStart + word.end),
+      });
+    }
+    if (windowEnd >= duration) break;
+  }
+
+  if (!words.length) throw new Error("The local model returned no Arabic transcription.");
+  return { text: words.map((word) => word.text).join(" "), words };
 }
 
 export interface TranscriberOptions {
@@ -104,28 +185,8 @@ export async function transcribeAudio(
     modelOptions,
   );
 
-  const result = (await transcriber(audio, {
-    language: "ar",
-    task: "transcribe",
-    chunk_length_s: 28,
-    stride_length_s: 4,
-    return_timestamps: "word",
-  })) as PipelineResult;
-
-  const words = chunksToWords(result.chunks ?? []);
-  if (!words.length && result.text) {
-    const pieces = splitNormalizedArabic(result.text);
-    const secondsPerWord = Math.max(0.08, audio.length / 16_000 / Math.max(1, pieces.length));
-    pieces.forEach((normalized, index) => {
-      words.push({
-        text: normalized,
-        normalized,
-        start: index * secondsPerWord,
-        end: (index + 1) * secondsPerWord,
-      });
-    });
-  }
-  if (!words.length) throw new Error("The local model returned no Arabic transcription.");
+  const result = await transcribeInShortWindows(transcriber as unknown as AsrPipeline, audio);
+  const words = result.words;
 
   const audioDuration = audio.length / 16_000;
   const last = words.at(-1);
@@ -136,5 +197,5 @@ export async function transcribeAudio(
   // Ensure custom model outputs containing unusual spacing or marks are always
   // normalized before entering the Qur'an matcher.
   for (const word of words) word.normalized = normalizeArabic(word.normalized);
-  return { text: result.text ?? words.map((word) => word.text).join(" "), words };
+  return { text: result.text, words };
 }

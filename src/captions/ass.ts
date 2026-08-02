@@ -16,11 +16,11 @@ function escapeAss(value: string): string {
 
 function contextLine(word: AlignedWord, index: QuranIndex, radius = 4): string {
   const verse = index.verses.get(word.verseKey);
-  if (!verse) return escapeAss(word.arabic);
+  if (!verse) return `\u202B${escapeAss(word.arabic)}\u202C`;
   const active = Math.max(0, word.position - 1);
   const start = Math.max(0, active - radius);
   const end = Math.min(verse.words.length, active + radius + 1);
-  return verse.words
+  const line = verse.words
     .slice(start, end)
     .map((item) => {
       const escaped = escapeAss(item.text.uthmani);
@@ -29,6 +29,9 @@ function contextLine(word: AlignedWord, index: QuranIndex, radius = 4): string {
         : escaped;
     })
     .join(" ");
+  // Inline ASS color tags can split the Unicode bidi run. An explicit RTL
+  // embedding preserves canonical Arabic word order around the active word.
+  return `\u202B${line}\u202C`;
 }
 
 export function createAss(words: AlignedWord[], index: QuranIndex): string {

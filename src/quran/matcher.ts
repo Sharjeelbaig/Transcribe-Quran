@@ -12,10 +12,17 @@ interface CandidateAlignment {
   end: number;
   confidence: number;
   score: number;
-  mappings: Array<{ transcriptIndex: number; canonicalIndex: number; similarity: number }>;
+  mappings: Array<{
+    transcriptIndex: number;
+    canonicalIndex: number;
+    similarity: number;
+    partIndex?: number;
+    partCount?: number;
+  }>;
 }
 
-const WINDOW_WORDS = 36;
+const WINDOW_WORDS = 12;
+const CONTINUITY_GAP_SECONDS = 3;
 const MAX_POSTINGS_PER_TOKEN = 512;
 const MAX_CANDIDATES = 36;
 
@@ -90,9 +97,24 @@ function alignCandidate(
       const diagonal = (costs[at(row - 1, column - 1)] ?? Number.POSITIVE_INFINITY) + (1 - similarity);
       const dropTranscript = (costs[at(row - 1, column)] ?? Number.POSITIVE_INFINITY) + 0.8;
       const missedCanonical = (costs[at(row, column - 1)] ?? Number.POSITIVE_INFINITY) + 0.58;
-      const minimum = Math.min(diagonal, dropTranscript, missedCanonical);
+      let splitAcrossTwo = Number.POSITIVE_INFINITY;
+      if (column >= 2) {
+        const previousCanonical = canonical[column - 2];
+        if (previousCanonical) {
+          const combined = `${previousCanonical.normalized}${canonicalWord.normalized}`;
+          const combinedSimilarity = stringSimilarity(transcriptWord.normalized, combined);
+          if (combinedSimilarity >= 0.75) {
+            splitAcrossTwo =
+              (costs[at(row - 1, column - 2)] ?? Number.POSITIVE_INFINITY) +
+              (1 - combinedSimilarity) +
+              0.08;
+          }
+        }
+      }
+      const minimum = Math.min(diagonal, dropTranscript, missedCanonical, splitAcrossTwo);
       costs[at(row, column)] = minimum;
-      back[at(row, column)] = minimum === diagonal ? 0 : minimum === dropTranscript ? 1 : 2;
+      back[at(row, column)] =
+        minimum === diagonal ? 0 : minimum === dropTranscript ? 1 : minimum === missedCanonical ? 2 : 3;
     }
   }
 
@@ -111,7 +133,33 @@ function alignCandidate(
   const mappings: CandidateAlignment["mappings"] = [];
   while (row > 0 && column >= 0) {
     const direction = back[at(row, column)];
-    if (column > 0 && direction === 0) {
+    if (column >= 2 && direction === 3) {
+      const transcriptWord = transcript[row - 1];
+      const firstCanonical = canonical[column - 2];
+      const secondCanonical = canonical[column - 1];
+      if (transcriptWord && firstCanonical && secondCanonical) {
+        const similarity = stringSimilarity(
+          transcriptWord.normalized,
+          `${firstCanonical.normalized}${secondCanonical.normalized}`,
+        );
+        mappings.push({
+          transcriptIndex: row - 1,
+          canonicalIndex: sliceStart + column - 1,
+          similarity,
+          partIndex: 1,
+          partCount: 2,
+        });
+        mappings.push({
+          transcriptIndex: row - 1,
+          canonicalIndex: sliceStart + column - 2,
+          similarity,
+          partIndex: 0,
+          partCount: 2,
+        });
+      }
+      row -= 1;
+      column -= 2;
+    } else if (column > 0 && direction === 0) {
       const transcriptWord = transcript[row - 1];
       const canonicalWord = canonical[column - 1];
       if (transcriptWord && canonicalWord) {
@@ -160,16 +208,33 @@ export interface MatchResult {
 export function matchTranscript(
   transcript: TranscriptWord[],
   index: QuranIndex,
-  confidenceThreshold = 0.58,
+  confidenceThreshold = 0.5,
 ): MatchResult {
   const matched: MatchedTranscriptWord[] = [];
   const windowScores: number[] = [];
   let unmatchedWindows = 0;
   let expectedCanonical: number | undefined;
 
-  for (let offset = 0; offset < transcript.length; offset += WINDOW_WORDS) {
-    const window = transcript.slice(offset, offset + WINDOW_WORDS);
+  const windows: Array<{ words: TranscriptWord[]; resetContinuity: boolean }> = [];
+  let current: TranscriptWord[] = [];
+  let resetContinuity = true;
+  for (const word of transcript) {
+    const previous = current.at(-1);
+    const hasLongGap = previous !== undefined && word.start - previous.end >= CONTINUITY_GAP_SECONDS;
+    if (current.length >= WINDOW_WORDS || hasLongGap) {
+      windows.push({ words: current, resetContinuity });
+      current = [];
+      resetContinuity = hasLongGap;
+    }
+    current.push(word);
+  }
+  if (current.length) windows.push({ words: current, resetContinuity });
+
+  for (const windowInfo of windows) {
+    const window = windowInfo.words;
     if (!window.length) continue;
+    if (windowInfo.resetContinuity) expectedCanonical = undefined;
+    const continuityFloor = expectedCanonical;
     const starts = candidateStarts(window, index, expectedCanonical);
     const uniqueCandidates = new Map<string, CandidateAlignment>();
     for (const start of starts) {
@@ -183,10 +248,22 @@ export function matchTranscript(
     const best = candidates[0];
     const second = candidates[1];
 
-    if (!best || best.confidence < confidenceThreshold) {
+    const effectiveThreshold =
+      expectedCanonical === undefined
+        ? confidenceThreshold
+        : Math.max(0.38, confidenceThreshold - 0.1);
+    if (!best || best.confidence < effectiveThreshold) {
       unmatchedWindows += 1;
       expectedCanonical = undefined;
       windowScores.push(best?.confidence ?? 0);
+      continue;
+    }
+
+    const strongAnchors = best.mappings.filter((mapping) => mapping.similarity >= 0.72).length;
+    const requiredAnchors = window.length >= 5 ? Math.min(3, Math.ceil(window.length / 5)) : 1;
+    if (expectedCanonical === undefined && strongAnchors < requiredAnchors) {
+      unmatchedWindows += 1;
+      windowScores.push(best.confidence);
       continue;
     }
 
@@ -200,16 +277,92 @@ export function matchTranscript(
       continue;
     }
 
-    for (const mapping of best.mappings) {
+    const acceptedMappings = best.mappings.filter(
+      (mapping) => continuityFloor === undefined || mapping.canonicalIndex >= continuityFloor,
+    );
+    const firstMapping = acceptedMappings[0];
+    if (best.confidence >= 0.75 && firstMapping && firstMapping.transcriptIndex > 0) {
+      const firstCanonical = index.words[firstMapping.canonicalIndex];
+      const firstSource = window[firstMapping.transcriptIndex];
+      const leading = window.slice(0, firstMapping.transcriptIndex);
+      const lastLeading = leading.at(-1);
+      const missingPrefix = (firstCanonical?.position ?? 1) - 1;
+      if (
+        firstCanonical &&
+        firstSource &&
+        leading.length &&
+        lastLeading &&
+        missingPrefix > 0 &&
+        missingPrefix <= 2 &&
+        firstSource.start - lastLeading.end <= CONTINUITY_GAP_SECONDS
+      ) {
+        const spanStart = leading[0]!.start;
+        const spanEnd = firstSource.start;
+        const duration = Math.max(0.04, (spanEnd - spanStart) / missingPrefix);
+        for (let missing = 0; missing < missingPrefix; missing += 1) {
+          matched.push({
+            ...leading[Math.min(missing, leading.length - 1)]!,
+            start: spanStart + duration * missing,
+            end: spanStart + duration * (missing + 1),
+            canonicalIndex: firstMapping.canonicalIndex - missingPrefix + missing,
+            matchConfidence: best.confidence * 0.5,
+            inferredTiming: true,
+          });
+        }
+      }
+    }
+
+    for (const mapping of acceptedMappings) {
       const source = window[mapping.transcriptIndex];
       if (!source) continue;
+      const partCount = mapping.partCount ?? 1;
+      const partIndex = mapping.partIndex ?? 0;
+      const duration = Math.max(0.02, source.end - source.start);
       matched.push({
         ...source,
+        start: source.start + (duration * partIndex) / partCount,
+        end: source.start + (duration * (partIndex + 1)) / partCount,
         canonicalIndex: mapping.canonicalIndex,
         matchConfidence: mapping.similarity * best.confidence,
       });
     }
-    expectedCanonical = best.end + 1;
+
+    let acceptedEnd = acceptedMappings.at(-1)?.canonicalIndex ?? best.end;
+    const lastMapping = acceptedMappings.at(-1);
+    if (best.confidence >= 0.62 && lastMapping) {
+      const lastCanonical = index.words[lastMapping.canonicalIndex];
+      const lastSource = window[lastMapping.transcriptIndex];
+      const trailing = window.slice(lastMapping.transcriptIndex + 1);
+      const firstTrailing = trailing[0];
+      const remainingInVerse = lastCanonical
+        ? lastCanonical.verseData.words.length - lastCanonical.position
+        : 0;
+      if (
+        lastCanonical &&
+        lastSource &&
+        firstTrailing &&
+        remainingInVerse > 0 &&
+        remainingInVerse <= 2 &&
+        firstTrailing.start - lastSource.end <= 0.75
+      ) {
+        const spanStart = Math.max(lastSource.end, firstTrailing.start);
+        const spanEnd = trailing[Math.min(remainingInVerse, trailing.length) - 1]?.end ?? firstTrailing.end;
+        const duration = Math.max(0.04, (spanEnd - spanStart) / remainingInVerse);
+        for (let missing = 1; missing <= remainingInVerse; missing += 1) {
+          matched.push({
+            ...trailing[Math.min(missing - 1, trailing.length - 1)]!,
+            start: spanStart + duration * (missing - 1),
+            end: spanStart + duration * missing,
+            canonicalIndex: lastMapping.canonicalIndex + missing,
+            matchConfidence: best.confidence * 0.5,
+            inferredTiming: true,
+          });
+        }
+        acceptedEnd = lastMapping.canonicalIndex + remainingInVerse;
+      }
+    }
+
+    expectedCanonical = Math.max(continuityFloor ?? 0, acceptedEnd + 1);
     windowScores.push(best.confidence);
   }
 
@@ -235,7 +388,7 @@ function toAlignedWord(
     wordTranslation: canonical.word.translation,
     verseTranslation: canonical.verseData.translations[translation],
     confidence: Math.max(0, Math.min(1, source.matchConfidence * (source.confidence ?? 1))),
-    inferredTiming: false,
+    inferredTiming: source.inferredTiming ?? false,
     canonicalIndex: source.canonicalIndex,
   };
 }

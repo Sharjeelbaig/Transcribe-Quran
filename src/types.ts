@@ -91,6 +91,7 @@ export interface TranscriptWord {
 export interface MatchedTranscriptWord extends TranscriptWord {
   canonicalIndex: number;
   matchConfidence: number;
+  inferredTiming?: boolean;
 }
 
 export interface AlignedWord {

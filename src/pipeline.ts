@@ -64,6 +64,7 @@ export async function processVideo(options: ProcessOptions): Promise<ProcessResu
       offline: options.offline,
       verbose: options.verbose,
     });
+    if (options.verbose) console.error(`Recognized Arabic: ${transcription.text}`);
 
     console.error("[3/6] Loading and indexing the canonical Qur'an…");
     const corpus = await loadQuranCorpus();
@@ -71,6 +72,10 @@ export async function processVideo(options: ProcessOptions): Promise<ProcessResu
 
     console.error("[4/6] Matching recognized speech to canonical verses…");
     const match = matchTranscript(transcription.words, index, options.confidenceThreshold);
+    if (options.verbose) {
+      console.error(`Matcher window scores: ${match.windowScores.map((score) => score.toFixed(3)).join(", ")}`);
+      console.error(`Unmatched windows: ${match.unmatchedWindows}`);
+    }
     const words = materializeAlignedWords(match.matched, index, options.translation);
     if (!words.length) {
       throw new Error(
