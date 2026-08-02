@@ -58,6 +58,9 @@ npx transcribe-quran ./video.mp4 --translation abdulHaleem
 # Show groups of up to four Arabic words (the default is one word)
 npx transcribe-quran ./video.mp4 --words 4
 
+# Increase Arabic and English caption sizes
+npx transcribe-quran ./video.mp4 --font-size 110 --translation-font-size 42
+
 # Require a model that is already present in the local cache
 npx transcribe-quran ./video.mp4 --offline
 
@@ -77,6 +80,9 @@ to that many consecutive words within an ayah. Every group is laid out in
 Qur'anic reading order: the earliest word is on the right and reading proceeds
 to the left. The Arabic and English caption pair is centered horizontally and
 vertically in the video by default.
+
+Use `--font-size` for Arabic and `--translation-font-size` for English. The
+defaults are 88 and 34 respectively.
 
 ## How matching works
 

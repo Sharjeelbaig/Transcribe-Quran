@@ -68,4 +68,11 @@ describe("ASS caption generation", () => {
   it("rejects invalid word limits", () => {
     expect(() => createAss([], index, 0)).toThrow("positive integer");
   });
+
+  it("accepts user-selected Arabic and English font sizes", () => {
+    const ass = createAss([], index, 1, { arabicFontSize: 110, translationFontSize: 42 });
+
+    expect(ass).toContain("Style: Quran,Noto Naskh Arabic,110,");
+    expect(ass).toContain("Style: Translation,Arial,42,");
+  });
 });

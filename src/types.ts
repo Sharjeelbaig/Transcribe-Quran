@@ -140,6 +140,8 @@ export interface ProcessOptions {
   dtype: "fp32" | "fp16" | "q8" | "q4";
   translation: TranslationKey;
   wordsPerCaption?: number;
+  fontSize?: number;
+  translationFontSize?: number;
   confidenceThreshold: number;
   burnVideo: boolean;
   offline: boolean;

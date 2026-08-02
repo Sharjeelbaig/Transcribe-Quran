@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { processVideo } from "./pipeline.js";
+import { DEFAULT_ARABIC_FONT_SIZE, DEFAULT_TRANSLATION_FONT_SIZE } from "./captions/ass.js";
 import { DEFAULT_MODEL } from "./model/transcriber.js";
 import type { ProcessOptions, TranslationKey } from "./types.js";
 
@@ -32,6 +33,9 @@ Options:
       --dtype <q8|q4|fp32>    Model precision (q8)
       --translation <name>    Verse translation (saheehInternational)
       --words <count>         Maximum Arabic words shown at once (1)
+      --font-size <number>    Arabic caption font size (${DEFAULT_ARABIC_FONT_SIZE})
+      --translation-font-size <number>
+                              English caption font size (${DEFAULT_TRANSLATION_FONT_SIZE})
       --confidence <0..1>     Minimum passage match confidence (0.50)
       --offline               Forbid all network model access
       --no-burn               Only create alignment JSON and ASS subtitles
@@ -61,6 +65,8 @@ async function main(): Promise<void> {
       dtype: { type: "string", default: "q8" },
       translation: { type: "string", default: "saheehInternational" },
       words: { type: "string", default: "1" },
+      "font-size": { type: "string", default: String(DEFAULT_ARABIC_FONT_SIZE) },
+      "translation-font-size": { type: "string", default: String(DEFAULT_TRANSLATION_FONT_SIZE) },
       confidence: { type: "string", default: "0.50" },
       offline: { type: "boolean", default: false },
       "no-burn": { type: "boolean", default: false },
@@ -90,6 +96,14 @@ async function main(): Promise<void> {
   if (!Number.isSafeInteger(wordsPerCaption) || wordsPerCaption < 1) {
     throw new Error("--words must be a positive integer.");
   }
+  const fontSize = Number(parsed.values["font-size"]);
+  const translationFontSize = Number(parsed.values["translation-font-size"]);
+  if (!Number.isFinite(fontSize) || fontSize <= 0) {
+    throw new Error("--font-size must be a positive number.");
+  }
+  if (!Number.isFinite(translationFontSize) || translationFontSize <= 0) {
+    throw new Error("--translation-font-size must be a positive number.");
+  }
 
   const options: ProcessOptions = {
     input,
@@ -100,6 +114,8 @@ async function main(): Promise<void> {
     dtype: valueIn(parsed.values.dtype, ["fp32", "fp16", "q8", "q4"] as const, "dtype"),
     translation: valueIn(parsed.values.translation, TRANSLATIONS, "translation"),
     wordsPerCaption,
+    fontSize,
+    translationFontSize,
     confidenceThreshold,
     burnVideo: !parsed.values["no-burn"],
     offline: parsed.values.offline,
