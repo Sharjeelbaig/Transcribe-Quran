@@ -55,6 +55,9 @@ npx transcribe-quran ./video.mp4 --no-burn
 # Use a different included verse translation
 npx transcribe-quran ./video.mp4 --translation abdulHaleem
 
+# Show groups of up to four Arabic words (the default is one word)
+npx transcribe-quran ./video.mp4 --words 4
+
 # Require a model that is already present in the local cache
 npx transcribe-quran ./video.mp4 --offline
 
@@ -68,6 +71,11 @@ npx transcribe-quran ./video.mp4 \
 Available verse translations are `saheehInternational`, `abdulHaleem`,
 `taqiUsmani`, `pickthall`, and `yusufAli`. Each aligned word also contains its
 word-level English translation.
+
+Arabic captions show one word at a time by default. `--words <count>` groups up
+to that many consecutive words within an ayah. Every group is laid out in
+Qur'anic reading order: the earliest word is on the right and reading proceeds
+to the left.
 
 ## How matching works
 

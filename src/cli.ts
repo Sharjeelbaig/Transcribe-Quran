@@ -4,7 +4,7 @@ import { processVideo } from "./pipeline.js";
 import { DEFAULT_MODEL } from "./model/transcriber.js";
 import type { ProcessOptions, TranslationKey } from "./types.js";
 
-const VERSION = "1.0.1";
+const VERSION = "1.0.3";
 const TRANSLATIONS: TranslationKey[] = [
   "saheehInternational",
   "abdulHaleem",
@@ -27,6 +27,7 @@ Options:
       --model <id-or-path>    Transformers.js ONNX model (${DEFAULT_MODEL})
       --dtype <q8|q4|fp32>    Model precision (q8)
       --translation <name>    Verse translation (saheehInternational)
+      --words <count>         Maximum Arabic words shown at once (1)
       --confidence <0..1>     Minimum passage match confidence (0.50)
       --offline               Forbid all network model access
       --no-burn               Only create alignment JSON and ASS subtitles
@@ -55,6 +56,7 @@ async function main(): Promise<void> {
       model: { type: "string", default: DEFAULT_MODEL },
       dtype: { type: "string", default: "q8" },
       translation: { type: "string", default: "saheehInternational" },
+      words: { type: "string", default: "1" },
       confidence: { type: "string", default: "0.50" },
       offline: { type: "boolean", default: false },
       "no-burn": { type: "boolean", default: false },
@@ -80,6 +82,10 @@ async function main(): Promise<void> {
   if (!Number.isFinite(confidenceThreshold) || confidenceThreshold < 0 || confidenceThreshold > 1) {
     throw new Error("--confidence must be a number between 0 and 1.");
   }
+  const wordsPerCaption = Number(parsed.values.words);
+  if (!Number.isSafeInteger(wordsPerCaption) || wordsPerCaption < 1) {
+    throw new Error("--words must be a positive integer.");
+  }
 
   const options: ProcessOptions = {
     input,
@@ -89,6 +95,7 @@ async function main(): Promise<void> {
     model: parsed.values.model,
     dtype: valueIn(parsed.values.dtype, ["fp32", "fp16", "q8", "q4"] as const, "dtype"),
     translation: valueIn(parsed.values.translation, TRANSLATIONS, "translation"),
+    wordsPerCaption,
     confidenceThreshold,
     burnVideo: !parsed.values["no-burn"],
     offline: parsed.values.offline,

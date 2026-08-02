@@ -101,7 +101,7 @@ export async function processVideo(options: ProcessOptions): Promise<ProcessResu
     await writeFile(paths.alignment, `${JSON.stringify(alignment, null, 2)}\n`, "utf8");
 
     console.error("[5/6] Generating RTL word-by-word ASS captions…");
-    await writeFile(paths.subtitles, createAss(words, index), "utf8");
+    await writeFile(paths.subtitles, createAss(words, index, options.wordsPerCaption ?? 1), "utf8");
 
     let videoPath: string | undefined;
     if (options.burnVideo) {
