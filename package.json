@@ -12,6 +12,7 @@
   "files": [
     "dist",
     "assets",
+    "ui",
     "quran.json",
     "README.md",
     "THIRD_PARTY_NOTICES.md"

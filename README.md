@@ -64,6 +64,10 @@ npx transcribe-quran ./video.mp4 --font-size 110 --translation-font-size 42
 # Choose installed font families
 npx transcribe-quran ./video.mp4 --font Amiri --translation-font Georgia
 
+# Open the local browser editor (video path optional)
+npx transcribe-quran --ui ./video.mp4
+npx transcribe-quran --ui
+
 # Require a model that is already present in the local cache
 npx transcribe-quran ./video.mp4 --offline
 
@@ -89,6 +93,17 @@ Use `--font-size` for Arabic and `--translation-font-size` for English. The
 defaults are 310 and 92 respectively. Use `--font` and `--translation-font` to
 choose font families; the defaults are Amiri Quran and Arial. The font must be
 installed on the system or available in the renderer's fonts directory.
+
+## Browser editor
+
+`--ui` starts a local editor at `127.0.0.1`. Pass a video path to load it
+immediately, or omit the path and use the drag-and-drop area or file picker in
+the browser. The editor previews synchronized Qur'an captions, lets you drag
+caption layers, resize them, change the current caption settings, search
+installed/bundled fonts, import local `.ttf`, `.otf`, `.woff`, or `.woff2`
+fonts, save a project file, add text/image overlays, and export ASS subtitles
+or a rendered MP4. Use `--port <number>` to choose a port and `--no-open` to
+keep the browser from opening automatically.
 
 ## How matching works
 

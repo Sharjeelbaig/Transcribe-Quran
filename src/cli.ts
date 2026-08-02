@@ -10,6 +10,7 @@ import {
   DEFAULT_TRANSLATION_FONT_SIZE,
 } from "./captions/ass.js";
 import { DEFAULT_MODEL } from "./model/transcriber.js";
+import { startUiServer } from "./ui/server.js";
 import type { ProcessOptions, TranslationKey } from "./types.js";
 
 const packageMetadata = JSON.parse(
@@ -29,7 +30,7 @@ const HELP = `transcribe-quran ${VERSION}
 Create fully local, canonical Qur'an word-by-word captions for a video.
 
 Usage:
-  npx transcribe-quran <video> [options]
+  npx transcribe-quran [video] [options]
 
 Options:
   -o, --output <path>         Captioned video output path
@@ -50,6 +51,9 @@ Options:
       --offline               Forbid all network model access
       --no-burn               Only create alignment JSON and ASS subtitles
       --keep-temp             Retain extracted audio and temporary files
+      --ui                    Launch the local browser editor
+      --port <number>         UI server port (4317)
+      --no-open               Do not open the browser automatically with --ui
   -v, --verbose               Show model download and diagnostic progress
   -h, --help                  Show this help
       --version               Show the version
@@ -84,6 +88,9 @@ async function main(): Promise<void> {
       offline: { type: "boolean", default: false },
       "no-burn": { type: "boolean", default: false },
       "keep-temp": { type: "boolean", default: false },
+      ui: { type: "boolean", default: false },
+      port: { type: "string", default: "4317" },
+      "no-open": { type: "boolean", default: false },
       verbose: { type: "boolean", short: "v", default: false },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", default: false },
@@ -99,8 +106,8 @@ async function main(): Promise<void> {
     return;
   }
   const input = parsed.positionals[0];
-  if (!input) throw new Error(`Missing input video.\n\n${HELP}`);
   if (parsed.positionals.length > 1) throw new Error("Only one input video may be processed per command.");
+  if (!input && !parsed.values.ui) throw new Error(`Missing input video.\n\n${HELP}`);
   const confidenceThreshold = Number(parsed.values.confidence);
   if (!Number.isFinite(confidenceThreshold) || confidenceThreshold < 0 || confidenceThreshold > 1) {
     throw new Error("--confidence must be a number between 0 and 1.");
@@ -121,6 +128,10 @@ async function main(): Promise<void> {
   if (!Number.isFinite(captionGap) || captionGap < 0) {
     throw new Error("--caption-gap must be a non-negative number.");
   }
+  const port = Number(parsed.values.port);
+  if (!Number.isSafeInteger(port) || port < 0 || port > 65535) {
+    throw new Error("--port must be an integer between 0 and 65535.");
+  }
   const fontName = parsed.values.font.trim();
   const translationFontName = parsed.values["translation-font"].trim();
   if (!fontName || /[,\\\r\n]/.test(fontName)) {
@@ -129,6 +140,36 @@ async function main(): Promise<void> {
   if (!translationFontName || /[,\\\r\n]/.test(translationFontName)) {
     throw new Error("--translation-font must be a non-empty font family name without commas or line breaks.");
   }
+
+  if (parsed.values.ui) {
+    const uiServer = await startUiServer({
+      ...(input ? { input } : {}),
+      port,
+      openBrowser: !parsed.values["no-open"],
+      settings: {
+        wordsPerCaption,
+        translation: valueIn(parsed.values.translation, TRANSLATIONS, "translation"),
+        arabicFontName: fontName,
+        translationFontName,
+        arabicFontSize: fontSize,
+        translationFontSize,
+        captionGap,
+        confidenceThreshold,
+        model: parsed.values.model,
+        dtype: valueIn(parsed.values.dtype, ["fp32", "fp16", "q8", "q4"] as const, "dtype"),
+        offline: parsed.values.offline,
+      },
+    });
+    const shutdown = async () => {
+      await uiServer.close();
+      process.exit(0);
+    };
+    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
+    return;
+  }
+
+  if (!input) throw new Error(`Missing input video.\n\n${HELP}`);
 
   const options: ProcessOptions = {
     input,

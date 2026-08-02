@@ -4,6 +4,7 @@ export { normalizeArabic } from "./quran/normalize-arabic.js";
 export { matchTranscript, materializeAlignedWords } from "./quran/matcher.js";
 export {
   createAss,
+  type AssPosition,
   DEFAULT_CAPTION_GAP,
   DEFAULT_ARABIC_FONT_SIZE,
   DEFAULT_TRANSLATION_FONT_SIZE,

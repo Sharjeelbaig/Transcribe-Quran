@@ -90,6 +90,32 @@ describe("ASS caption generation", () => {
     expect(ass).toContain("Style: Translation,Georgia,92,");
   });
 
+  it("accepts independently positioned caption layers", () => {
+    const canonical = index.words[0]!;
+    const word: AlignedWord = {
+      start: 0.4,
+      end: 1.2,
+      surah: canonical.surah,
+      verse: canonical.verse,
+      verseKey: canonical.verseKey,
+      position: canonical.position,
+      arabic: canonical.word.text.uthmani,
+      imlaei: canonical.word.text.imlaei,
+      wordTranslation: canonical.word.translation,
+      verseTranslation: canonical.verseData.translations.saheehInternational,
+      confidence: 1,
+      inferredTiming: false,
+      canonicalIndex: canonical.index,
+    };
+    const ass = createAss([word], index, 1, {
+      arabicPosition: { x: 400, y: 700 },
+      translationPosition: { x: 650, y: 1200 },
+    });
+
+    expect(ass).toContain("{\\an5\\pos(400,700)}");
+    expect(ass).toContain("{\\an5\\pos(650,1200)}");
+  });
+
   it("rejects font names that would corrupt the ASS style format", () => {
     expect(() => createAss([], index, 1, { arabicFontName: "Bad,Font" })).toThrow("font family name");
   });

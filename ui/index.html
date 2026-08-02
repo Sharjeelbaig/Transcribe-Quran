@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>transcribe-quran editor</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 20h14"/></symbol>
+      <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 4h12l2 2v14H5V4Zm3 0v5h7V4M8 20v-7h8v7"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0 5-5m-5 5-5-5M5 20h14"/></symbol>
+      <symbol id="i-export" viewBox="0 0 24 24"><path d="M14 4h6v6m-1-5-8 8M19 14v5H5V5h5"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm8 4-2 1 .1 2.2-1.9 1.1-1.8-1.2-1.8 1.2-1.9-1.1.1-2.2-2-1 0-2.2 2-1-.1-2.2L8.6 5l1.8 1.2 1.8-1.2 1.9 1.1-.1 2.2 2 1V12Z"/></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 4 8 4-8 4-8-4 8-4Zm-8 8 8 4 8-4M4 16l8 4 8-4"/></symbol>
+      <symbol id="i-layout" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/></symbol>
+      <symbol id="i-captions" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h4m2 0h4M7 14h3m2 0h5"/></symbol>
+      <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7 4 12l5 5M5 12h8a6 6 0 0 1 6 6"/></symbol>
+      <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 7 5 5-5 5m4-5h-8a6 6 0 0 0-6 6"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 15.4A8.5 8.5 0 0 1 8.6 4 8.5 8.5 0 1 0 20 15.4Z"/></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    </svg>
+
+    <header class="app-header">
+      <div class="brand-block">
+        <div class="brand-mark">TQ</div>
+        <div>
+          <div class="brand-name">transcribe-quran</div>
+          <div class="project-name" id="project-title">Untitled project</div>
+        </div>
+        <span id="alignment-badge" class="status-chip">Not transcribed</span>
+      </div>
+      <div class="header-actions">
+        <button id="undo-button" class="icon-button quiet" data-tooltip="Undo" aria-label="Undo" disabled><svg><use href="#i-undo"/></svg></button>
+        <button id="redo-button" class="icon-button quiet" data-tooltip="Redo" aria-label="Redo" disabled><svg><use href="#i-redo"/></svg></button>
+        <span class="header-divider"></span>
+        <button id="theme-toggle" class="icon-button quiet" data-tooltip="Toggle theme" aria-label="Toggle theme"><svg><use href="#i-sun"/></svg></button>
+        <button id="choose-button" class="button outline"><svg><use href="#i-upload"/></svg><span>Open video</span></button>
+        <button id="save-project" class="button outline"><svg><use href="#i-save"/></svg><span>Save project</span></button>
+        <button id="export-menu-button" class="button primary"><svg><use href="#i-export"/></svg><span>Export</span><svg class="chevron"><use href="#i-chevron"/></svg></button>
+        <div id="export-menu" class="popover export-menu hidden">
+          <button id="export-subtitles" class="menu-item" disabled><svg><use href="#i-download"/></svg><span>Download ASS subtitles</span></button>
+          <button id="export-video" class="menu-item" disabled><svg><use href="#i-export"/></svg><span>Render captioned MP4</span></button>
+        </div>
+      </div>
+      <input id="video-input" type="file" accept="video/*,.mkv" hidden />
+      <input id="project-input" type="file" accept="application/json,.json" hidden />
+      <input id="image-input" type="file" accept="image/*" hidden />
+      <input id="font-input" type="file" accept=".ttf,.otf,.woff,.woff2" hidden />
+    </header>
+
+    <div class="app-shell">
+      <aside class="tool-rail" aria-label="Editor tools">
+        <button class="rail-button active" data-tool="captions" data-tooltip="Captions" aria-label="Captions"><svg><use href="#i-captions"/></svg><span>Captions</span></button>
+        <button class="rail-button" data-tool="layout" data-tooltip="Layout" aria-label="Layout"><svg><use href="#i-layout"/></svg><span>Layout</span></button>
+        <button class="rail-button" data-tool="overlays" data-tooltip="Overlays" aria-label="Overlays"><svg><use href="#i-layers"/></svg><span>Overlays</span></button>
+        <button class="rail-button" data-tool="engine" data-tooltip="Engine" aria-label="Engine"><svg><use href="#i-settings"/></svg><span>Engine</span></button>
+      </aside>
+
+      <main class="editor-column">
+        <div class="editor-toolbar">
+          <div class="toolbar-context"><span class="context-dot"></span><span id="video-name">No video selected</span></div>
+          <div class="toolbar-actions">
+            <button id="reset-layout" class="button small outline">Reset layout</button>
+            <button id="transcribe-button" class="button small primary" disabled><svg><use href="#i-captions"/></svg><span>Transcribe locally</span></button>
+          </div>
+        </div>
+
+        <section class="canvas-area">
+          <div id="drop-zone" class="drop-zone">
+            <div class="drop-icon"><svg><use href="#i-upload"/></svg></div>
+            <h1>Open a recitation video</h1>
+            <p>Drop a file here or choose one from your computer. Processing stays on this device.</p>
+            <button id="drop-choose-button" class="button primary"><svg><use href="#i-upload"/></svg><span>Choose video</span></button>
+          </div>
+
+          <div id="stage-wrap" class="stage-wrap hidden">
+            <div id="stage" class="stage">
+              <video id="video" preload="metadata" playsinline></video>
+              <div id="overlay-stage" class="overlay-stage">
+                <div id="arabic-layer" class="caption-layer arabic-layer" data-layer="arabic">
+                  <div class="caption-content" dir="rtl"></div>
+                  <button class="resize-handle" aria-label="Resize Arabic caption"></button>
+                </div>
+                <div id="translation-layer" class="caption-layer translation-layer" data-layer="translation">
+                  <div class="caption-content" dir="ltr"></div>
+                  <button class="resize-handle" aria-label="Resize translation caption"></button>
+                </div>
+                <div id="custom-overlays"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="transport" aria-label="Playback controls">
+          <button id="play-button" class="transport-play" disabled aria-label="Play or pause"><svg><use href="#i-play"/></svg></button>
+          <span id="time-label" class="time-label">00:00 / 00:00</span>
+          <input id="timeline" class="scrubber" type="range" min="0" max="0" value="0" step="0.01" disabled />
+          <select id="speed-select" class="compact-select" aria-label="Playback speed">
+            <option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option>
+          </select>
+        </section>
+
+        <section class="timeline-panel">
+          <div class="timeline-heading"><div><strong>Caption timeline</strong><span id="timeline-summary">Transcribe a video to see ayahs and words.</span></div><button id="timeline-zoom" class="icon-button quiet" data-tooltip="Timeline zoom" aria-label="Timeline zoom"><svg><use href="#i-more"/></svg></button></div>
+          <div class="caption-track-scroll"><div id="caption-track" class="caption-track"><div class="track-empty">Caption events will appear here.</div></div></div>
+        </section>
+        <p id="status" class="status" role="status">Choose a video to start.</p>
+      </main>
+
+      <aside class="inspector" aria-label="Inspector">
+        <section id="tool-captions" class="inspector-section">
+          <div class="inspector-title"><div><span class="section-kicker">CAPTIONS</span><h2>Text and style</h2></div><button class="icon-button quiet" data-tooltip="Caption help" aria-label="Caption help"><span class="help-mark">?</span></button></div>
+          <label>Translation<select id="translation"><option value="saheehInternational">Saheeh International</option><option value="abdulHaleem">Abdul Haleem</option><option value="taqiUsmani">Taqi Usmani</option><option value="pickthall">Pickthall</option><option value="yusufAli">Yusuf Ali</option></select></label>
+          <label>Words shown at once<input id="words" type="number" min="1" step="1" value="1" /></label>
+          <div class="field-grid">
+            <label>Arabic size<input id="arabic-size" type="number" min="1" step="1" value="310" /></label>
+            <label>English size<input id="translation-size" type="number" min="1" step="1" value="92" /></label>
+          </div>
+          <label>Gap between lines<input id="caption-gap" type="number" min="0" step="1" value="40" /></label>
+          <div class="font-picker" data-font-picker="arabic">
+            <div class="field-label-row"><span>Arabic font</span><button id="font-import-button" class="inline-action">Import font</button></div>
+            <button id="arabic-font-trigger" class="font-trigger" type="button"><span id="arabic-font-label">Amiri Quran</span><svg><use href="#i-chevron"/></svg></button>
+            <input id="arabic-font" type="hidden" value="Amiri Quran" />
+            <div id="arabic-font-menu" class="font-menu popover hidden"><input id="arabic-font-search" class="font-search" placeholder="Search fonts…" /><div id="arabic-font-options" class="font-options"></div></div>
+          </div>
+          <div class="font-picker" data-font-picker="translation">
+            <span class="field-label">English font</span>
+            <button id="translation-font-trigger" class="font-trigger" type="button"><span id="translation-font-label">Arial</span><svg><use href="#i-chevron"/></svg></button>
+            <input id="translation-font" type="hidden" value="Arial" />
+            <div id="translation-font-menu" class="font-menu popover hidden"><input id="translation-font-search" class="font-search" placeholder="Search fonts…" /><div id="translation-font-options" class="font-options"></div></div>
+          </div>
+          <label class="checkbox-row"><input id="offline" type="checkbox" /> Offline model access only</label>
+        </section>
+
+        <section id="tool-layout" class="inspector-section hidden">
+          <div class="inspector-title"><div><span class="section-kicker">LAYOUT</span><h2>Selected layer</h2></div></div>
+          <div class="layer-picker"><button class="layer-button active" data-select-layer="arabic">Arabic</button><button class="layer-button" data-select-layer="translation">English</button></div>
+          <p class="hint">Drag a caption on the canvas. Use the corner handle to resize it. Hold Shift with the arrow keys for larger moves.</p>
+          <div class="field-grid"><label>X position<input id="layer-x" type="number" min="0" max="1080" step="1" /></label><label>Y position<input id="layer-y" type="number" min="0" max="1920" step="1" /></label></div>
+          <button id="apply-layer-position" class="button outline full-width">Apply position</button>
+        </section>
+
+        <section id="tool-overlays" class="inspector-section hidden">
+          <div class="inspector-title"><div><span class="section-kicker">OVERLAYS</span><h2>Extra layers</h2></div></div>
+          <div id="overlay-list" class="overlay-list"><div class="list-empty">No extra overlays yet.</div></div>
+          <div class="button-row"><button id="add-text" class="button outline"><span>＋</span> Text</button><button id="add-image" class="button outline"><span>＋</span> Image</button></div>
+          <section id="overlay-editor" class="subsection hidden"><div class="subsection-heading"><strong>Selected text overlay</strong><button id="delete-overlay" class="text-button">Delete</button></div><label>Text<input id="overlay-text" type="text" value="New text" /></label><div class="field-grid"><label>Font<input id="overlay-font" type="text" value="Arial" /></label><label>Size<input id="overlay-size" type="number" min="1" step="1" value="72" /></label></div></section>
+        </section>
+
+        <section id="tool-engine" class="inspector-section hidden">
+          <div class="inspector-title"><div><span class="section-kicker">ENGINE</span><h2>Transcription</h2></div></div>
+          <label>Whisper model<input id="model" type="text" value="Sharjeelbaig/whisper-tiny-ar-quran-onnx" /></label>
+          <div class="field-grid"><label>Precision<select id="dtype"><option value="q8" selected>q8</option><option value="q4">q4</option><option value="fp16">fp16</option><option value="fp32">fp32</option></select></label><label>Confidence<input id="confidence" type="number" min="0" max="1" step="0.01" value="0.5" /></label></div>
+          <p class="hint">The model runs locally. Lower confidence allows more matches but can increase false positives.</p>
+        </section>
+
+        <section class="project-actions">
+          <button id="load-project" class="button outline full-width">Load project file</button>
+          <div id="download-links" class="download-links"></div>
+        </section>
+      </aside>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <script type="module" src="/client.js"></script>
+  </body>
+</html>

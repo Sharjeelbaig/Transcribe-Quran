@@ -19,27 +19,36 @@ export async function renderCaptionedVideo(
   subtitles: string,
   output: string,
   fontDirectory = bundledFontDirectory(),
+  imageOverlays: ImageOverlay[] = [],
 ): Promise<void> {
   const filter = `ass=filename='${filterEscape(subtitles)}':fontsdir='${filterEscape(fontDirectory)}'`;
-  await runProcess("ffmpeg", [
-    "-hide_banner",
-    "-loglevel",
-    "error",
-    "-y",
-    "-i",
-    input,
-    "-vf",
-    filter,
-    "-c:v",
-    "libx264",
-    "-preset",
-    "medium",
-    "-crf",
-    "18",
-    "-c:a",
-    "copy",
-    "-movflags",
-    "+faststart",
-    output,
-  ]);
+  const args = ["-hide_banner", "-loglevel", "error", "-y", "-i", input];
+  if (!imageOverlays.length) {
+    args.push("-vf", filter);
+  } else {
+    for (const overlay of imageOverlays) args.push("-loop", "1", "-i", overlay.path);
+    const graph: string[] = [`[0:v]${filter}[captioned]`];
+    let previous = "captioned";
+    imageOverlays.forEach((overlay, index) => {
+      const scaled = `overlay${index}`;
+      const base = `base${index}`;
+      const outputLabel = index === imageOverlays.length - 1 ? "vout" : `composite${index}`;
+      graph.push(
+        `[${index + 1}:v][${previous}]scale2ref=w=main_w*${overlay.width}:h=main_h*${overlay.height}[${scaled}][${base}]`,
+        `[${base}][${scaled}]overlay=x=main_w*${overlay.x}-overlay_w/2:y=main_h*${overlay.y}-overlay_h/2:shortest=1[${outputLabel}]`,
+      );
+      previous = outputLabel;
+    });
+    args.push("-filter_complex", graph.join(";"), "-map", "[vout]", "-map", "0:a?");
+  }
+  args.push("-c:v", "libx264", "-preset", "medium", "-crf", "18", "-c:a", "copy", "-movflags", "+faststart", output);
+  await runProcess("ffmpeg", args);
+}
+
+export interface ImageOverlay {
+  path: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
