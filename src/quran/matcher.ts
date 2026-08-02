@@ -23,6 +23,7 @@ interface CandidateAlignment {
 
 const WINDOW_WORDS = 12;
 const CONTINUITY_GAP_SECONDS = 3;
+const MAX_INFERRED_WORD_SECONDS = 4;
 const MAX_POSTINGS_PER_TOKEN = 512;
 const MAX_CANDIDATES = 36;
 
@@ -298,16 +299,18 @@ export function matchTranscript(
       ) {
         const spanStart = leading[0]!.start;
         const spanEnd = firstSource.start;
-        const duration = Math.max(0.04, (spanEnd - spanStart) / missingPrefix);
-        for (let missing = 0; missing < missingPrefix; missing += 1) {
-          matched.push({
-            ...leading[Math.min(missing, leading.length - 1)]!,
-            start: spanStart + duration * missing,
-            end: spanStart + duration * (missing + 1),
-            canonicalIndex: firstMapping.canonicalIndex - missingPrefix + missing,
-            matchConfidence: best.confidence * 0.5,
-            inferredTiming: true,
-          });
+        const duration = (spanEnd - spanStart) / missingPrefix;
+        if (duration <= MAX_INFERRED_WORD_SECONDS) {
+          for (let missing = 0; missing < missingPrefix; missing += 1) {
+            matched.push({
+              ...leading[Math.min(missing, leading.length - 1)]!,
+              start: spanStart + duration * missing,
+              end: spanStart + duration * (missing + 1),
+              canonicalIndex: firstMapping.canonicalIndex - missingPrefix + missing,
+              matchConfidence: best.confidence * 0.5,
+              inferredTiming: true,
+            });
+          }
         }
       }
     }
@@ -347,18 +350,24 @@ export function matchTranscript(
       ) {
         const spanStart = Math.max(lastSource.end, firstTrailing.start);
         const spanEnd = trailing[Math.min(remainingInVerse, trailing.length) - 1]?.end ?? firstTrailing.end;
-        const duration = Math.max(0.04, (spanEnd - spanStart) / remainingInVerse);
-        for (let missing = 1; missing <= remainingInVerse; missing += 1) {
-          matched.push({
-            ...trailing[Math.min(missing - 1, trailing.length - 1)]!,
-            start: spanStart + duration * (missing - 1),
-            end: spanStart + duration * missing,
-            canonicalIndex: lastMapping.canonicalIndex + missing,
-            matchConfidence: best.confidence * 0.5,
-            inferredTiming: true,
-          });
+        const duration = (spanEnd - spanStart) / remainingInVerse;
+        const inferredRemaining = duration <= MAX_INFERRED_WORD_SECONDS ? remainingInVerse : 0;
+        if (inferredRemaining > 0) {
+          for (let missing = 1; missing <= inferredRemaining; missing += 1) {
+            matched.push({
+              ...trailing[Math.min(missing - 1, trailing.length - 1)]!,
+              start: spanStart + duration * (missing - 1),
+              end: spanStart + duration * missing,
+              canonicalIndex: lastMapping.canonicalIndex + missing,
+              matchConfidence: best.confidence * 0.5,
+              inferredTiming: true,
+            });
+          }
+        } else {
+          // A long span usually means the next token belongs to a later
+          // passage after a pause. Do not carry captions across that silence.
         }
-        acceptedEnd = lastMapping.canonicalIndex + remainingInVerse;
+        acceptedEnd = lastMapping.canonicalIndex + inferredRemaining;
       }
     }
 
@@ -409,7 +418,12 @@ export function materializeAlignedWords(
     if (previous) {
       const missingCount = current.canonicalIndex - previous.canonicalIndex - 1;
       const availableTime = current.start - previous.end;
-      if (missingCount > 0 && missingCount <= 5 && availableTime >= missingCount * 0.06) {
+      if (
+        missingCount > 0 &&
+        missingCount <= 5 &&
+        availableTime >= missingCount * 0.06 &&
+        availableTime / missingCount <= MAX_INFERRED_WORD_SECONDS
+      ) {
         const duration = availableTime / missingCount;
         for (let missing = 1; missing <= missingCount; missing += 1) {
           const canonicalIndex = previous.canonicalIndex + missing;

@@ -6,7 +6,7 @@ import { normalizeArabic, splitNormalizedArabic } from "../quran/normalize-arabi
 
 export const DEFAULT_MODEL = "Sharjeelbaig/whisper-tiny-ar-quran-onnx";
 
-interface PipelineChunk {
+export interface PipelineChunk {
   text?: string;
   timestamp?: [number | null, number | null];
 }
@@ -32,18 +32,26 @@ function defaultCacheDirectory(): string {
   return join(process.env.XDG_CACHE_HOME || join(home, ".cache"), "transcribe-quran");
 }
 
+// A single Arabic word can be elongated, but a timestamp spanning most of a
+// short inference window is a decoder failure rather than a real word span.
+// Treat it as missing so an adjacent overlapping window can provide timing.
+const MAX_REASONABLE_WORD_SECONDS = 5;
+
 function timestampPair(chunk: PipelineChunk, fallbackStart: number, fallbackEnd: number): [number, number] {
   const start = chunk.timestamp?.[0] ?? fallbackStart;
   const reportedEnd = chunk.timestamp?.[1];
   // Whisper sometimes emits 0 for the last word's open-ended timestamp.
   const end =
-    reportedEnd !== null && reportedEnd !== undefined && reportedEnd > start
+    reportedEnd !== null &&
+    reportedEnd !== undefined &&
+    reportedEnd > start &&
+    reportedEnd - start <= MAX_REASONABLE_WORD_SECONDS
       ? reportedEnd
       : Math.max(start + 0.08, fallbackEnd);
   return [Math.max(0, start), Math.max(start + 0.02, end)];
 }
 
-function chunksToWords(chunks: PipelineChunk[], windowDuration?: number): TranscriptWord[] {
+export function chunksToWords(chunks: PipelineChunk[], windowDuration?: number): TranscriptWord[] {
   const words: TranscriptWord[] = [];
   for (const [chunkIndex, originalChunk] of chunks.entries()) {
     let chunk = originalChunk;

@@ -92,6 +92,11 @@ canonical corpus. A continuity-aware dynamic-programming alignment then maps
 the timestamps to Qur'an words. Display Arabic, word translations, and verse
 translations always come from `quran.json`.
 
+Whisper timestamp outliers are rejected when a single word spans an impossible
+portion of an inference window. Missing-word timing is inferred only across
+short, plausible gaps; long pauses are left uncaptioned so a previous verse
+cannot bleed into the next passage.
+
 Matching is deliberately confidence-gated. If the audio is not Qur'an, is too
 unclear, or is too ambiguous, the command refuses to create captions rather
 than inventing an ayah. Identical short phrases cannot always be uniquely
