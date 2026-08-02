@@ -23,6 +23,10 @@ function isolatedArabic(value: string): string {
   return `${RTL_ISOLATE}${escapeAss(value)}${POP_DIRECTIONAL_ISOLATE}`;
 }
 
+const CAPTION_CENTER_X = 540;
+const QURAN_CENTER_Y = 900;
+const TRANSLATION_CENTER_Y = 1020;
+
 function contextLine(word: AlignedWord, index: QuranIndex, wordsPerCaption: number): string {
   const verse = index.verses.get(word.verseKey);
   if (!verse || wordsPerCaption === 1) {
@@ -66,8 +70,8 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Quran,Noto Naskh Arabic,88,&H00FFFFFF,&H0000D7FF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,1,4,1,2,70,70,170,1
-Style: Translation,Arial,34,&H00FFFFFF,&H00FFFFFF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,1,3,1,2,90,90,105,1
+Style: Quran,Noto Naskh Arabic,88,&H00FFFFFF,&H0000D7FF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,1,4,1,5,70,70,0,1
+Style: Translation,Arial,34,&H00FFFFFF,&H00FFFFFF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,1,3,1,5,90,90,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -76,9 +80,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   for (const word of words) {
     const start = assTime(word.start);
     const end = assTime(Math.max(word.end, word.start + 0.08));
-    events.push(`Dialogue: 0,${start},${end},Quran,,0,0,0,,${contextLine(word, index, wordsPerCaption)}`);
     events.push(
-      `Dialogue: 1,${start},${end},Translation,,0,0,0,,${escapeAss(word.wordTranslation)}  •  ${word.verseKey}`,
+      `Dialogue: 0,${start},${end},Quran,,0,0,0,,{\\an5\\pos(${CAPTION_CENTER_X},${QURAN_CENTER_Y})}${contextLine(word, index, wordsPerCaption)}`,
+    );
+    events.push(
+      `Dialogue: 1,${start},${end},Translation,,0,0,0,,{\\an5\\pos(${CAPTION_CENTER_X},${TRANSLATION_CENTER_Y})}${escapeAss(word.wordTranslation)}  •  ${word.verseKey}`,
     );
   }
   return header + events.join("\n") + "\n";

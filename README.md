@@ -75,7 +75,8 @@ word-level English translation.
 Arabic captions show one word at a time by default. `--words <count>` groups up
 to that many consecutive words within an ayah. Every group is laid out in
 Qur'anic reading order: the earliest word is on the right and reading proceeds
-to the left.
+to the left. The Arabic and English caption pair is centered horizontally and
+vertically in the video by default.
 
 ## How matching works
 
