@@ -82,7 +82,8 @@ Arabic captions show one word at a time by default. `--words <count>` groups up
 to that many consecutive words within an ayah. Every group is laid out in
 Qur'anic reading order: the earliest word is on the right and reading proceeds
 to the left. The Arabic and English caption pair is centered horizontally and
-vertically in the video by default.
+vertically in the video by default, with a 40-unit gap between the two lines.
+Use `--caption-gap <number>` to change that vertical spacing.
 
 Use `--font-size` for Arabic and `--translation-font-size` for English. The
 defaults are 310 and 92 respectively. Use `--font` and `--translation-font` to

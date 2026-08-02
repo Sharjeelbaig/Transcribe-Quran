@@ -31,8 +31,8 @@ describe("ASS caption generation", () => {
 
     expect(ass).toContain("Amiri Quran");
     expect(ass).toContain("Style: Quran,Amiri Quran,310,&H00FFFFFF,&H0000D7FF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,1,4,1,5,");
-    expect(ass).toContain("{\\an5\\pos(540,900)}");
-    expect(ass).toContain("{\\an5\\pos(540,1020)}In (the) name");
+    expect(ass).toContain("{\\an5\\pos(540,894)}");
+    expect(ass).toContain("{\\an5\\pos(540,1135)}In (the) name");
     expect(ass).toContain("{\\c&H0000D7FF&\\b1}\u2067بِسْمِ\u2069");
     expect(ass).not.toContain("ٱللَّهِ");
     expect(ass).toContain("In (the) name  •  1:1");
@@ -67,6 +67,10 @@ describe("ASS caption generation", () => {
 
   it("rejects invalid word limits", () => {
     expect(() => createAss([], index, 0)).toThrow("positive integer");
+  });
+
+  it("rejects a negative caption gap", () => {
+    expect(() => createAss([], index, 1, { captionGap: -1 })).toThrow("non-negative number");
   });
 
   it("accepts user-selected Arabic and English font sizes", () => {

@@ -144,6 +144,7 @@ export interface ProcessOptions {
   translationFontName?: string;
   fontSize?: number;
   translationFontSize?: number;
+  captionGap?: number;
   confidenceThreshold: number;
   burnVideo: boolean;
   offline: boolean;

@@ -5,6 +5,7 @@ import { processVideo } from "./pipeline.js";
 import {
   DEFAULT_ARABIC_FONT_NAME,
   DEFAULT_ARABIC_FONT_SIZE,
+  DEFAULT_CAPTION_GAP,
   DEFAULT_TRANSLATION_FONT_NAME,
   DEFAULT_TRANSLATION_FONT_SIZE,
 } from "./captions/ass.js";
@@ -41,6 +42,7 @@ Options:
       --font-size <number>    Arabic caption font size (${DEFAULT_ARABIC_FONT_SIZE})
       --translation-font-size <number>
                               English caption font size (${DEFAULT_TRANSLATION_FONT_SIZE})
+      --caption-gap <number>  Vertical gap between Arabic and English (${DEFAULT_CAPTION_GAP})
       --font <family>         Arabic caption font (${DEFAULT_ARABIC_FONT_NAME})
       --translation-font <family>
                               English caption font (${DEFAULT_TRANSLATION_FONT_NAME})
@@ -75,6 +77,7 @@ async function main(): Promise<void> {
       words: { type: "string", default: "1" },
       "font-size": { type: "string", default: String(DEFAULT_ARABIC_FONT_SIZE) },
       "translation-font-size": { type: "string", default: String(DEFAULT_TRANSLATION_FONT_SIZE) },
+      "caption-gap": { type: "string", default: String(DEFAULT_CAPTION_GAP) },
       font: { type: "string", default: DEFAULT_ARABIC_FONT_NAME },
       "translation-font": { type: "string", default: DEFAULT_TRANSLATION_FONT_NAME },
       confidence: { type: "string", default: "0.50" },
@@ -108,11 +111,15 @@ async function main(): Promise<void> {
   }
   const fontSize = Number(parsed.values["font-size"]);
   const translationFontSize = Number(parsed.values["translation-font-size"]);
+  const captionGap = Number(parsed.values["caption-gap"]);
   if (!Number.isFinite(fontSize) || fontSize <= 0) {
     throw new Error("--font-size must be a positive number.");
   }
   if (!Number.isFinite(translationFontSize) || translationFontSize <= 0) {
     throw new Error("--translation-font-size must be a positive number.");
+  }
+  if (!Number.isFinite(captionGap) || captionGap < 0) {
+    throw new Error("--caption-gap must be a non-negative number.");
   }
   const fontName = parsed.values.font.trim();
   const translationFontName = parsed.values["translation-font"].trim();
@@ -136,6 +143,7 @@ async function main(): Promise<void> {
     translationFontName,
     fontSize,
     translationFontSize,
+    captionGap,
     confidenceThreshold,
     burnVideo: !parsed.values["no-burn"],
     offline: parsed.values.offline,

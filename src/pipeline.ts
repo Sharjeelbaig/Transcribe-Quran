@@ -117,6 +117,7 @@ export async function processVideo(options: ProcessOptions): Promise<ProcessResu
         ...(options.translationFontSize !== undefined
           ? { translationFontSize: options.translationFontSize }
           : {}),
+        ...(options.captionGap !== undefined ? { captionGap: options.captionGap } : {}),
       }),
       "utf8",
     );
