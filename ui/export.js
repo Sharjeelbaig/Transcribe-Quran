@@ -145,12 +145,13 @@ async function renderByCapture(element, totalSeconds, onFrame, signal) {
   const stream = element.captureStream();
   const track = stream.getVideoTracks()[0];
   if (!track) throw new Error("The source video exposed no capturable picture track.");
-  // The processor drops whatever overflows its buffer, so playback is held to
-  // roughly the speed frames are consumed. Letting the decoder run free costs
-  // frames, and a missing frame freezes the picture for its slot.
-  const processor = new MediaStreamTrackProcessor({ track, maxBufferSize: 32 });
+  // Playback stays at 1x and is never paused mid-render. Pausing to relieve
+  // backpressure freezes the captured picture for as long as the pause lasts,
+  // which the finished file shows as a stutter; overflowing the buffer instead
+  // costs single frames that the constant-rate grid hides.
+  const processor = new MediaStreamTrackProcessor({ track, maxBufferSize: 60 });
   const reader = processor.readable.getReader();
-  element.playbackRate = 2;
+  element.playbackRate = 1;
   let rendered = 0;
   let lastTime = -1;
   try {
@@ -171,11 +172,6 @@ async function renderByCapture(element, totalSeconds, onFrame, signal) {
       }
       rendered += 1;
       lastTime = time;
-      const lag = element.currentTime - time;
-      if (!element.paused && lag > 0.3) element.pause();
-      else if (element.paused && lag < 0.1 && element.currentTime < totalSeconds && !element.ended) {
-        await element.play().catch(() => {});
-      }
       if (element.ended && element.currentTime - time < 0.05) break;
     }
   } finally {
@@ -414,25 +410,35 @@ export async function exportMp4({
     const keyFrameInterval = Math.max(1, Math.round(fps * 2));
     const frameDuration = Math.round(1_000_000 / fps);
 
-    let index = 0;
+    // Output frames land on a strict 1/fps grid rather than inheriting the
+    // arrival time of the source frame that produced them. A source frame the
+    // capture stream never delivered would otherwise leave a hole, and an
+    // uneven hole in an already frame-duplicated source is visible as judder.
+    let nextSlot = 0;
+    let reportedSlot = 0;
     const onFrame = async (picture, time) => {
       if (encoderError) throw encoderError;
-      context.drawImage(picture, 0, 0, width, height);
-      const scene = buildScene({ project, words, surahNames, time, duration: totalSeconds });
-      paintScene(context, scene, { width, height, images });
-      const frame = new VideoFrame(canvas, {
-        timestamp: Math.round(time * 1_000_000),
-        duration: frameDuration,
-      });
-      encoder.encode(frame, { keyFrame: index % keyFrameInterval === 0 });
-      frame.close();
-      index += 1;
-      await drainEncoder(encoder, 6);
-      if (index % 10 === 0) {
+      const targetSlot = Math.max(nextSlot, Math.round(time * fps));
+      for (let slot = nextSlot; slot <= targetSlot; slot += 1) {
+        const slotTime = slot / fps;
+        context.drawImage(picture, 0, 0, width, height);
+        const scene = buildScene({ project, words, surahNames, time: slotTime, duration: totalSeconds });
+        paintScene(context, scene, { width, height, images });
+        const frame = new VideoFrame(canvas, {
+          timestamp: Math.round(slotTime * 1_000_000),
+          duration: frameDuration,
+        });
+        encoder.encode(frame, { keyFrame: slot % keyFrameInterval === 0 });
+        frame.close();
+        await drainEncoder(encoder, 6);
+      }
+      nextSlot = targetSlot + 1;
+      if (nextSlot - reportedSlot >= 10) {
+        reportedSlot = nextSlot;
         onProgress?.({
           phase: "video",
-          progress: Math.min(1, index / expectedFrames),
-          message: `Rendering frame ${index} of ${expectedFrames}`,
+          progress: Math.min(1, nextSlot / expectedFrames),
+          message: `Rendering frame ${nextSlot} of ${expectedFrames}`,
         });
         await yieldToTasks();
       }
@@ -441,20 +447,13 @@ export async function exportMp4({
     element.pause();
     element.currentTime = 0;
     await once(element, "seeked").catch(() => {});
-    let rendered = 0;
-    let lastTime = -1 / fps;
-    if (captureSupported(element)) {
-      const captured = await renderByCapture(element, totalSeconds, onFrame, signal);
-      rendered = captured.rendered;
-      lastTime = captured.lastTime;
-    }
+    if (captureSupported(element)) await renderByCapture(element, totalSeconds, onFrame, signal);
     // A capture stream can end a few frames before the audio does. Seeking the
     // remainder keeps the picture covering the whole soundtrack.
-    if (lastTime < totalSeconds - 1.5 / fps) {
-      const tail = await renderBySeeking(element, lastTime + 1 / fps, totalSeconds, fps, onFrame, signal);
-      rendered += tail.rendered;
-      lastTime = tail.lastTime;
+    if (nextSlot / fps < totalSeconds - 1.5 / fps) {
+      await renderBySeeking(element, nextSlot / fps, totalSeconds, fps, onFrame, signal);
     }
+    const rendered = nextSlot;
     if (!rendered) throw new Error("The source video produced no frames to render.");
     await encoder.flush();
     if (encoderError) throw encoderError;
@@ -483,7 +482,7 @@ export async function exportMp4({
       frameRate: fps,
       frames: rendered,
       expectedFrames,
-      coveredSeconds: Math.max(0, lastTime),
+      coveredSeconds: Math.max(0, (rendered - 1) / fps),
       hasAudio: Boolean(audioBuffer),
     };
   } finally {
