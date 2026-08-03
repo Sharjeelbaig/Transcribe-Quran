@@ -24,6 +24,14 @@ included at `assets/fonts/Amiri-OFL.txt`. The bundled Noto Naskh Arabic fallback
 is also distributed under the SIL Open Font License 1.1; its license is included
 at `assets/fonts/OFL.txt`.
 
+## MP4 muxer
+
+The browser editor writes exported MP4 files with
+[`mp4-muxer`](https://github.com/Vanilagy/mp4-muxer) by Vanilagy, distributed
+under the MIT License. The bundle is vendored at `ui/vendor/mp4-muxer.mjs` so
+the editor keeps working offline; its license is included at
+`ui/vendor/mp4-muxer.LICENSE`.
+
 ## Runtime libraries
 
 This package uses Transformers.js and its transitive open-source dependencies.

@@ -117,7 +117,19 @@ the browser. The editor previews synchronized Qur'an captions, lets you drag
 caption layers, resize them, change the current caption settings, search
 installed/bundled fonts, import local `.ttf`, `.otf`, `.woff`, or `.woff2`
 fonts, save a project file, add text/image overlays, and export ASS subtitles
-or a rendered MP4. Click any word on the caption timeline to manually edit its
+or a rendered MP4.
+
+**Export MP4 exactly as previewed** renders in the browser, not with FFmpeg.
+The preview and the exporter call the same renderer (`ui/renderer.js`) — the
+editor paints it onto the stage canvas, the exporter paints it onto a canvas
+the size of the source video — so the file cannot drift from what you edited.
+Frames are encoded with WebCodecs and written to MP4 in the page, keeping the
+original picture, frame rate, and audio. This needs a Chromium-based browser;
+elsewhere the editor falls back to the FFmpeg render, which approximates the
+preview through libass. Rendering runs at roughly real time and continues in a
+background tab.
+
+Click any word on the caption timeline to manually edit its
 Arabic text, translation, timing, visibility, or restore the automatic match;
 drag the edges of a timeline block for precise timing changes. Select an
 overlay or caption and press Delete/Backspace to remove it. Overlay deletion
@@ -185,15 +197,19 @@ The repository has two entry paths that share the same transcription engine:
    `/api/project` or `/api/export` for server-side validation. Caption text
    remains canonical by default; manual caption edits are keyed to stable
    alignment word IDs.
-5. **Export request.** The browser sends the edited project to `/api/export`.
-   The server applies caption edits, removes hidden captions, generates ASS
-   subtitles using the current layout and text overlays, and—when video
-   rendering is requested—passes image overlays to FFmpeg. The resulting ASS
-   and MP4 files are exposed as downloads for the current session.
+5. **MP4 export.** The browser steps through the source video, composites each
+   frame with `ui/renderer.js` — the same module that paints the editor stage —
+   and encodes the result with WebCodecs into an MP4 it muxes in the page. The
+   original audio is carried across, and nothing about the picture round-trips
+   through the server.
+6. **Subtitle export.** `/api/export` still produces ASS subtitles from the
+   edited project for use in other tools, and can render with FFmpeg as a
+   fallback for browsers without WebCodecs.
 
 In short: the recognition model is used to locate and time Qur'anic words;
 the corpus supplies the displayed text; the browser project supplies edits and
-visual composition; and export applies those two layers to ASS/FFmpeg output.
+visual composition; and one renderer draws that composition for both the
+preview and the exported file.
 
 ## How it works
 
@@ -305,7 +321,8 @@ flowchart TB
   H --> I["Measured word boundaries"]
   I --> J["Readable, non-overlapping display windows"]
   J --> K["Alignment JSON + ASS"]
-  K --> L["FFmpeg caption render"]
+  K --> L["Browser editor: one renderer for preview and export"]
+  L --> M["WebCodecs MP4"]
 ```
 
 ## Offline behavior

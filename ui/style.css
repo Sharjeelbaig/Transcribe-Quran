@@ -90,29 +90,13 @@ svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-lineca
 .drop-zone h1 { margin: 16px 0 7px; font-size: 18px; letter-spacing: -.02em; }
 .drop-zone p { margin: 0 0 18px; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .stage-wrap { display: flex; width: 100%; height: 100%; min-height: 450px; align-items: center; justify-content: center; padding: 18px; }
-.stage { position: relative; width: min(100%, 1120px); max-height: 650px; background: #000; overflow: hidden; }
-.stage video { display: block; width: 100%; height: auto; background: #000; }
-.overlay-stage { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.caption-layer, .custom-overlay { position: absolute; transform: translate(-50%, -50%) translateY(var(--caption-transition-y, 0px)) scale(var(--caption-transition-scale, 1)) rotate(var(--layer-rotation, 0deg)); transform-origin: center; pointer-events: auto; user-select: none; text-align: center; white-space: nowrap; text-shadow: 0 2px 3px rgba(0,0,0,.95), 0 0 2px #000; }
-.caption-layer { padding: 5px 12px; border: 1px solid transparent; border-radius: 5px; cursor: move; }
-.caption-layer.selected { border-color: var(--accent); background: rgba(255,255,255,.08); }
-.caption-content { line-height: 1.08; }
-.arabic-layer { color: #fff; direction: rtl; font-family: "Amiri Quran", "Noto Naskh Arabic", serif; }
-.translation-layer { color: #fff; font-family: Arial, sans-serif; }
-.arabic-line { display: flex; flex-direction: row; align-items: center; gap: .24em; direction: ltr; }
-.arabic-word { display: inline-block; direction: rtl; unicode-bidi: isolate; }
-.arabic-word.active { color: #ffd529; }
-.translation-layer .caption-content { direction: ltr; }
-.resize-handle { position: absolute; right: -5px; bottom: -5px; width: 12px; height: 12px; padding: 0; border: 1px solid #222; border-radius: 3px; background: var(--accent); cursor: nwse-resize; opacity: 0; }
-.caption-layer.selected .resize-handle { opacity: 1; }
-.custom-overlay { border: 1px dashed transparent; padding: 5px 10px; color: #fff; cursor: move; box-sizing: border-box; }
-.custom-overlay.selected { border-style: solid; border-color: var(--accent); background: rgba(255,255,255,.08); }
-.custom-overlay img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
-.overlay-resize-handle, .overlay-rotate-handle { position:absolute; z-index:4; width:13px; height:13px; padding:0; border:1px solid #222; background:var(--accent); opacity:0; }
-.custom-overlay.selected .overlay-resize-handle, .custom-overlay.selected .overlay-rotate-handle { opacity:1; }
-.overlay-resize-handle { right:-7px; bottom:-7px; border-radius:3px; cursor:nwse-resize; }
-.overlay-rotate-handle { left:50%; top:-27px; transform:translateX(-50%); border-radius:50%; cursor:grab; }
-.overlay-rotate-handle::after { content:""; position:absolute; width:1px; height:13px; background:var(--accent); top:12px; left:5px; }
+/* The stage shrink-wraps the video so the canvas above it covers exactly the
+   visible frame: every design coordinate then maps to the same relative spot in
+   the preview and in the exported file. */
+.stage { position: relative; display: block; max-width: min(100%, 1120px); background: #000; line-height: 0; }
+.stage video { display: block; width: auto; height: auto; max-width: 100%; max-height: 620px; background: #000; }
+.stage-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: default; }
+.stage-canvas.grabbing { cursor: grabbing; }
 .effect-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:2px 0 12px; }
 .effect-control { min-width:0; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--panel-muted); }
 .effect-control .checkbox-row { margin:0 0 6px; font-size:12px; font-weight:600; }
@@ -137,6 +121,10 @@ svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-lineca
 .timeline-handle { position: absolute; top: 0; bottom: 0; z-index: 2; width: 7px; cursor: ew-resize; }
 .timeline-handle-start { left: 0; }
 .timeline-handle-end { right: 0; }
+.render-progress { display: flex; align-items: center; gap: 11px; margin-top: 10px; }
+.render-bar { position: relative; flex: 1; height: 6px; border-radius: 99px; background: var(--surface-soft); overflow: hidden; }
+.render-bar span { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 99px; background: var(--accent); transition: width .12s linear; }
+#render-progress-label { min-width: 210px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .status { min-height: 18px; margin: 7px 0 0; color: var(--muted); font-size: 11px; }
 .status.error { color: var(--danger); }
 .inspector { min-width: 0; padding: 21px 18px 30px; border-left: 1px solid var(--border); background: var(--surface); }

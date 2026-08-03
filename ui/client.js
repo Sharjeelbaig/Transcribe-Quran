@@ -1,12 +1,19 @@
 import { findActiveCaptionIndex } from "./caption-timing.js";
-
-const DESIGN_WIDTH = 1080;
-const DESIGN_HEIGHT = 1920;
+import {
+  DESIGN_HEIGHT,
+  DESIGN_WIDTH,
+  buildScene,
+  hitTest,
+  paintScene,
+  paintSelection,
+} from "./renderer.js";
+import { exportMp4, exportSupport } from "./export.js";
 
 const $ = (id) => document.getElementById(id);
 const video = $("video");
 const stage = $("stage");
-const overlayStage = $("overlay-stage");
+const stageCanvas = $("stage-canvas");
+const stageContext = stageCanvas.getContext("2d");
 const status = $("status");
 const dropZone = $("drop-zone");
 const stageWrap = $("stage-wrap");
@@ -22,8 +29,6 @@ const videoInput = $("video-input");
 const projectInput = $("project-input");
 const imageInput = $("image-input");
 const fontInput = $("font-input");
-const arabicLayer = $("arabic-layer");
-const translationLayer = $("translation-layer");
 const captionTrack = $("caption-track");
 const timelineSummary = $("timeline-summary");
 const toast = $("toast");
@@ -77,6 +82,13 @@ let captionEditBefore = null;
 let timingDrag = null;
 let previewAnimationFrame = null;
 let surahNames = new Map();
+let sceneBoxes = new Map();
+let selectionHandles = [];
+let exportJob = null;
+let lastRender = null;
+const overlayImages = new Map();
+const pendingOverlayImages = new Map();
+const requestedFonts = new Set();
 
 function icon(button, symbol) {
   if (button) button.innerHTML = `<svg><use href="#${symbol}"/></svg>`;
@@ -140,62 +152,6 @@ function currentLayer() {
 function visualFor(target) {
   target.visual ||= {};
   return target.visual;
-}
-
-function applyVisual(element, visual = {}) {
-  const opacity = Math.max(0, Math.min(1, Number(visual.opacity ?? 1)));
-  element.style.opacity = String(opacity);
-  element.style.setProperty("--layer-rotation", `${Number(visual.rotation || 0)}deg`);
-  const rgba = (hex, alpha) => {
-    const match = /^#?([0-9a-f]{6})$/i.exec(hex || "");
-    if (!match) return hex || "#000000";
-    const rgb = match[1];
-    return `rgba(${parseInt(rgb.slice(0, 2), 16)},${parseInt(rgb.slice(2, 4), 16)},${parseInt(rgb.slice(4, 6), 16)},${Math.max(0, Math.min(1, alpha))})`;
-  };
-  const outline = visual.outlineEnabled === false ? 0 : Math.max(0, Number(visual.outlineWidth ?? 0));
-  element.style.webkitTextStroke = outline ? `${outline}px ${rgba(visual.outlineColor || "#101010", visual.outlineOpacity ?? 1)}` : "";
-  const shadow = visual.shadowEnabled === false ? 0 : Math.max(0, Number(visual.shadowDistance ?? 0));
-  element.style.textShadow = shadow ? `${shadow}px ${shadow}px ${Math.max(1, shadow * 2)}px ${rgba(visual.shadowColor || "#000000", visual.shadowOpacity ?? 0.44)}` : "";
-  element.style.setProperty("--caption-transition-y", "0px");
-  element.style.setProperty("--caption-transition-scale", "1");
-}
-
-function transitionDuration(animation, spanSeconds) {
-  if (!animation?.preset || animation.preset === "none") return 0;
-  const maximum = Math.max(0, Math.floor(spanSeconds * 500));
-  return Math.min(maximum, Math.max(0, Math.round(Number(animation.duration ?? 250) || 0)));
-}
-
-function applyCaptionTransition(element, visual, word, now) {
-  const baseOpacity = Math.max(0, Math.min(1, Number(visual?.opacity ?? 1)));
-  const start = Number(word.displayStart ?? word.start);
-  const end = Number(word.displayEnd ?? word.end);
-  const span = Math.max(0, end - start);
-  const enter = transitionDuration(visual?.animationIn, span);
-  const exit = transitionDuration(visual?.animationOut, span);
-  const enterProgress = enter ? Math.max(0, Math.min(1, (now - start) / (enter / 1000))) : 1;
-  const exitProgress = exit ? Math.max(0, Math.min(1, (end - now) / (exit / 1000))) : 1;
-  const inPhase = enter > 0 && now < start + enter / 1000;
-  const outPhase = exit > 0 && now > end - exit / 1000;
-  const animation = inPhase ? visual?.animationIn : outPhase ? visual?.animationOut : undefined;
-  const progress = inPhase ? enterProgress : outPhase ? exitProgress : 1;
-  let opacity = baseOpacity;
-  let offsetY = 0;
-  let scale = 1;
-  const distance = Math.max(12, Math.round(element.clientHeight * 0.18));
-  if (animation?.preset === "fade") opacity *= progress;
-  if (animation?.preset === "scale") {
-    opacity *= 0.35 + 0.65 * progress;
-    scale = inPhase ? 0.82 + 0.18 * progress : 1 + 0.12 * (1 - progress);
-  }
-  if (animation?.preset === "slide-up" || animation?.preset === "slide-down") {
-    opacity *= progress;
-    const direction = animation.preset === "slide-up" ? -1 : 1;
-    offsetY = inPhase ? -direction * distance * (1 - progress) : direction * distance * (1 - progress);
-  }
-  element.style.opacity = String(opacity);
-  element.style.setProperty("--caption-transition-y", `${offsetY}px`);
-  element.style.setProperty("--caption-transition-scale", String(scale));
 }
 
 function captionEventId(word, index) {
@@ -373,31 +329,99 @@ function updateLayerSelection() {
   $("layer-animation-out").value = visual.animationOut?.preset || "none";
   $("layer-animation-in-duration").value = visual.animationIn?.duration ?? 250;
   $("layer-animation-out-duration").value = visual.animationOut?.duration ?? 250;
-  arabicLayer.classList.toggle("selected", selectedLayer === "arabic");
-  translationLayer.classList.toggle("selected", selectedLayer === "translation");
+  paintStage();
+}
+
+function currentDuration() {
+  return Number(state.alignment?.durationSeconds || state.project.durationSeconds || video.duration || 0);
+}
+
+/** Loads any font the scene needs into the canvas font set. Canvas silently
+ * falls back to a default face for fonts the document has not loaded yet, so
+ * the preview would otherwise disagree with the export for one repaint. */
+function ensureFonts() {
+  const families = new Set([state.project.settings.arabicFontName, state.project.settings.translationFontName]);
+  for (const overlay of state.project.overlays || []) {
+    if (overlay.type === "text" && overlay.fontName) families.add(overlay.fontName);
+  }
+  for (const family of families) {
+    if (!family || requestedFonts.has(family)) continue;
+    requestedFonts.add(family);
+    document.fonts?.load(`64px "${String(family).replace(/"/g, "")}"`).then(() => paintStage()).catch(() => {});
+  }
+}
+
+function ensureOverlayImages() {
+  const loading = [];
+  for (const overlay of state.project.overlays || []) {
+    const source = overlay.type === "image" ? overlay.source : undefined;
+    if (!source || overlayImages.has(source)) continue;
+    if (pendingOverlayImages.has(source)) {
+      loading.push(pendingOverlayImages.get(source));
+      continue;
+    }
+    const image = new Image();
+    image.decoding = "sync";
+    const ready = new Promise((resolve) => {
+      image.addEventListener("load", () => {
+        pendingOverlayImages.delete(source);
+        overlayImages.set(source, image);
+        paintStage();
+        resolve();
+      });
+      image.addEventListener("error", () => {
+        pendingOverlayImages.delete(source);
+        resolve();
+      });
+    });
+    pendingOverlayImages.set(source, ready);
+    loading.push(ready);
+    image.src = source;
+  }
+  return Promise.all(loading);
+}
+
+function selectedSceneId() {
+  if (selectedOverlayId) return `overlay:${selectedOverlayId}`;
+  return `caption:${selectedLayer}`;
+}
+
+function currentScene(time = video.currentTime || 0) {
+  return buildScene({
+    project: state.project,
+    words: captionEntries().map((entry) => entry.word),
+    surahNames,
+    time,
+    duration: currentDuration(),
+  });
+}
+
+/** The one place the editor draws captions and overlays. `exportMp4` calls the
+ * same renderer against the source-resolution canvas, so anything visible here
+ * is what lands in the file. */
+function paintStage() {
+  if (!stageCanvas || !stage.clientWidth || !stage.clientHeight) return;
+  ensureFonts();
+  ensureOverlayImages();
+  const ratio = window.devicePixelRatio || 1;
+  const width = Math.max(1, Math.round(stage.clientWidth * ratio));
+  const height = Math.max(1, Math.round(stage.clientHeight * ratio));
+  if (stageCanvas.width !== width || stageCanvas.height !== height) {
+    stageCanvas.width = width;
+    stageCanvas.height = height;
+  }
+  const now = video.currentTime || 0;
+  stageContext.setTransform(1, 0, 0, 1, 0, 0);
+  stageContext.clearRect(0, 0, width, height);
+  const entries = captionEntries();
+  const activeIndex = findActiveCaptionIndex(entries.map((entry) => entry.word), now);
+  activeCaption = activeIndex >= 0 ? entries[activeIndex] : null;
+  sceneBoxes = paintScene(stageContext, currentScene(now), { width, height, images: overlayImages });
+  selectionHandles = paintSelection(stageContext, sceneBoxes, { selectedId: selectedSceneId() });
 }
 
 function updateStageGeometry() {
-  if (!stage.clientHeight) return;
-  for (const [name, element] of [["arabic", arabicLayer], ["translation", translationLayer]]) {
-    const layer = state.project.layout[name];
-    element.style.left = `${(layer.position.x / DESIGN_WIDTH) * 100}%`;
-    element.style.top = `${(layer.position.y / DESIGN_HEIGHT) * 100}%`;
-    element.style.fontSize = `${Math.max(8, layer.fontSize * stage.clientHeight / DESIGN_HEIGHT)}px`;
-    element.style.fontFamily = name === "arabic" ? `"${state.project.settings.arabicFontName}", serif` : `"${state.project.settings.translationFontName}", sans-serif`;
-    applyVisual(element, layer.visual);
-  }
-  for (const overlay of state.project.overlays || []) {
-    const element = document.querySelector(`[data-overlay-id="${CSS.escape(overlay.id)}"]`);
-    if (!element) continue;
-    element.style.left = `${overlay.position.x * 100}%`;
-    element.style.top = `${overlay.position.y * 100}%`;
-    element.style.width = `${overlay.width * 100}%`;
-    element.style.height = `${overlay.height * 100}%`;
-    if (overlay.fontSize) element.style.fontSize = `${Math.max(8, overlay.fontSize * stage.clientHeight / DESIGN_HEIGHT)}px`;
-    element.style.zIndex = String(10 + Number(overlay.zIndex || 0));
-    applyVisual(element, overlay.visual);
-  }
+  paintStage();
 }
 
 function updateVideoStage() {
@@ -418,7 +442,7 @@ function updateVideoStage() {
   exportSubtitles.disabled = !state.hasAlignment;
   exportVideo.disabled = !state.hasAlignment;
   // Only offered once a render exists to download.
-  downloadVideo.disabled = !state.outputs?.video;
+  downloadVideo.disabled = !lastRender && !state.outputs?.video;
   if (state.project.videoPath && loadedVideoKey !== state.project.videoPath) {
     loadedVideoKey = state.project.videoPath;
     video.src = `/api/video?source=${encodeURIComponent(loadedVideoKey)}&t=${Date.now()}`;
@@ -427,30 +451,7 @@ function updateVideoStage() {
 }
 
 function renderCaption() {
-  const entries = captionEntries();
-  const words = entries.map((entry) => entry.word);
-  const now = video.currentTime || 0;
-  const index = findActiveCaptionIndex(words, now);
-  if (!words.length || index < 0) {
-    activeCaption = null;
-    arabicLayer.classList.add("hidden");
-    translationLayer.classList.add("hidden");
-    return;
-  }
-  const current = words[index];
-  const count = Math.max(1, Number(state.project.settings.wordsPerCaption) || 1);
-  const groupStart = Math.floor((Math.max(1, current.position) - 1) / count) * count + 1;
-  const groupEnd = groupStart + count - 1;
-  const group = words.filter((word) => word.verseKey === current.verseKey && word.position >= groupStart && word.position <= groupEnd);
-  activeCaption = { current, group };
-  arabicLayer.classList.remove("hidden");
-  translationLayer.classList.remove("hidden");
-  const ordered = group.slice().sort((left, right) => right.position - left.position);
-  arabicLayer.querySelector(".caption-content").innerHTML = `<span class="arabic-line">${ordered.map((word) => `<span class="arabic-word${word.position === current.position ? " active" : ""}">${escapeHtml(word.arabic)}</span>`).join("")}</span>`;
-  translationLayer.querySelector(".caption-content").textContent = `${current.wordTranslation}  •  ${current.verseKey}`;
-  updateStageGeometry();
-  applyCaptionTransition(arabicLayer, state.project.layout.arabic.visual, current, now);
-  applyCaptionTransition(translationLayer, state.project.layout.translation.visual, current, now);
+  paintStage();
 }
 
 function updatePlayer() {
@@ -566,74 +567,8 @@ function endTimingDrag() {
   recordHistory(before);
 }
 
-function surahNameFor(number) {
-  if (!number) return "";
-  return surahNames.get(number) || `Surah ${number}`;
-}
-
-function currentSurahNumber(now) {
-  const words = state.alignment?.words || [];
-  if (!words.length) return null;
-  let candidate = words[0];
-  for (const word of words) {
-    if (Number(word.start) <= now) candidate = word;
-    else break;
-  }
-  return Number(candidate.verseKey.split(":")[0]) || null;
-}
-
-function overlayText(overlay, now) {
-  const text = overlay.text || "";
-  if (!overlay.autoSurah) return text || "Text overlay";
-  return text.replace(/\{surah\}/gi, surahNameFor(currentSurahNumber(now))) || "Detected chapter";
-}
-
 function renderOverlays() {
-  const root = $("custom-overlays");
-  root.innerHTML = "";
-  for (const overlay of state.project.overlays || []) {
-    if (!overlay.visible) continue;
-    const now = video.currentTime || 0;
-    const start = Number(overlay.start ?? 0);
-    const end = Number(overlay.end ?? state.project.durationSeconds ?? video.duration ?? Infinity);
-    if (now < start || now > end) continue;
-    const element = document.createElement("div");
-    element.className = "custom-overlay";
-    if (overlay.id === selectedOverlayId) element.classList.add("selected");
-    element.dataset.overlayId = overlay.id;
-    if (overlay.type === "text") {
-      element.textContent = overlayText(overlay, now);
-    } else if (overlay.source) {
-      const image = document.createElement("img");
-      image.src = overlay.source;
-      image.alt = "Image overlay";
-      image.draggable = false;
-      element.appendChild(image);
-    }
-    if (overlay.id === selectedOverlayId) {
-      const resize = document.createElement("button");
-      resize.className = "overlay-resize-handle";
-      resize.setAttribute("aria-label", "Resize overlay");
-      resize.addEventListener("pointerdown", (event) => beginOverlayResize(event, overlay, element));
-      const rotate = document.createElement("button");
-      rotate.className = "overlay-rotate-handle";
-      rotate.setAttribute("aria-label", "Rotate overlay");
-      rotate.addEventListener("pointerdown", (event) => beginOverlayRotate(event, overlay, element));
-      element.append(resize, rotate);
-    }
-    if (overlay.color) element.style.color = overlay.color;
-    element.addEventListener("pointerdown", (event) => {
-      selectedOverlayId = overlay.id;
-      selectedCaptionIndex = null;
-      syncOverlayControls();
-      updateCaptionEditor();
-      renderTimeline();
-      renderOverlays();
-      beginOverlayDrag(event, overlay, element);
-    });
-    root.appendChild(element);
-  }
-  updateStageGeometry();
+  paintStage();
   syncOverlayControls();
   renderOverlayList();
 }
@@ -790,7 +725,7 @@ async function transcribe() {
 async function exportOutput(burnVideo) {
   commitCaptionEdit();
   syncSettingsFromControls();
-  setStatus(burnVideo ? "Rendering the edited video with FFmpeg…" : "Generating edited ASS subtitles…");
+  setStatus(burnVideo ? "Rendering the edited video…" : "Generating edited ASS subtitles…");
   try {
     const result = await api("/api/export", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ project: state.project, burnVideo }) });
     renderState(result);
@@ -800,64 +735,193 @@ async function exportOutput(burnVideo) {
   }
 }
 
-function beginLayerDrag(event, layerName, element) {
-  if (event.target.closest(".resize-handle")) return;
-  event.preventDefault();
-  if (selectedOverlayId) {
-    selectedOverlayId = null;
-    renderOverlays();
+function showRenderProgress(visible) {
+  $("render-progress").classList.toggle("hidden", !visible);
+  if (!visible) {
+    $("render-bar-fill").style.width = "0%";
+    $("render-progress-label").textContent = "Rendering…";
   }
-  const current = activeCaption?.current;
-  const activeIndex = current
-    ? state.alignment?.words?.findIndex((word) => word.verseKey === current.verseKey && word.canonicalIndex === current.canonicalIndex)
-    : -1;
-  if (activeIndex !== undefined && activeIndex >= 0) {
-    selectedCaptionIndex = activeIndex;
+}
+
+function updateRenderProgress({ phase, progress, message }) {
+  // Frame rendering dominates the wall clock, so it owns most of the bar and
+  // the audio and container passes share the tail.
+  const weighted = phase === "video" ? progress * 0.9 : phase === "audio" ? 0.9 + progress * 0.08 : phase === "finalize" ? 0.99 : 0;
+  $("render-bar-fill").style.width = `${Math.round(Math.max(0, Math.min(1, weighted)) * 100)}%`;
+  $("render-progress-label").textContent = `${Math.round(weighted * 100)}% · ${message}`;
+}
+
+function downloadBlob(blob, filename) {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 60_000);
+}
+
+function exportFileName() {
+  const base = String(state.project.videoName || "transcribe-quran").replace(/\.[^.]+$/, "");
+  return `${base}-captioned.mp4`;
+}
+
+/** Renders the MP4 in the page with the editor's own renderer. The server's
+ * FFmpeg path stays available only for browsers without WebCodecs, where it is
+ * the difference between an approximate render and none at all. */
+async function renderVideoLocally() {
+  if (exportJob) {
+    setStatus("A render is already running.");
+    return;
+  }
+  commitCaptionEdit();
+  syncSettingsFromControls();
+  const support = exportSupport();
+  if (!support.supported) {
+    notify(support.reason);
+    setStatus(`${support.reason} Falling back to the server renderer, which can differ slightly from this preview.`, true);
+    await exportOutput(true);
+    return;
+  }
+  const controller = new AbortController();
+  exportJob = controller;
+  exportVideo.disabled = true;
+  $("export-menu").classList.add("hidden");
+  showRenderProgress(true);
+  setStatus("Rendering every frame with the editor's renderer. Keep this tab open.");
+  try {
+    ensureFonts();
+    // Fonts, chapter names and overlay images all feed the renderer. Starting
+    // before they land would burn placeholders into the file, or drop an
+    // overlay whose image had not finished decoding.
+    if (!surahNames.size) await loadSurahs();
+    await Promise.all([ensureOverlayImages(), document.fonts?.ready]);
+    const result = await exportMp4({
+      project: state.project,
+      words: captionEntries().map((entry) => entry.word),
+      surahNames,
+      videoUrl: video.currentSrc || video.src,
+      duration: currentDuration(),
+      // The pipeline already probed the container, and that beats guessing from
+      // playback: a 50 fps recitation resampled to 30 judders.
+      frameRate: Number(state.alignment?.diagnostics?.timingFrameRate) || undefined,
+      images: overlayImages,
+      signal: controller.signal,
+      onProgress: updateRenderProgress,
+    });
+    lastRender = { blob: result.blob, name: exportFileName() };
+    downloadVideo.disabled = false;
+    downloadBlob(result.blob, lastRender.name);
+    const size = (result.blob.size / 1_048_576).toFixed(1);
+    setStatus(`Exported ${result.width}×${result.height} at ${result.frameRate} fps · ${result.frames} frames · ${size} MB${result.hasAudio ? "" : " · no audio track found"}.`);
+    notify("Export finished. The file matches the preview frame for frame.");
+  } catch (error) {
+    if (error?.name === "AbortError") setStatus("Render cancelled.");
+    else setStatus(error.message, true);
+  } finally {
+    exportJob = null;
+    exportVideo.disabled = !state.hasAlignment;
+    showRenderProgress(false);
+  }
+}
+
+/** Canvas pixels for a pointer event, matching the coordinate space the
+ * renderer reports its boxes in. */
+function stagePoint(event) {
+  const rect = stageCanvas.getBoundingClientRect();
+  return {
+    x: ((event.clientX - rect.left) / rect.width) * stageCanvas.width,
+    y: ((event.clientY - rect.top) / rect.height) * stageCanvas.height,
+    rect,
+  };
+}
+
+function handleUnderPoint(point) {
+  return selectionHandles.find((handle) =>
+    point.x >= handle.x - 3 && point.x <= handle.x + handle.size + 3 &&
+    point.y >= handle.y - 3 && point.y <= handle.y + handle.size + 3,
+  );
+}
+
+function selectCaptionLayer(layerName) {
+  if (selectedOverlayId) selectedOverlayId = null;
+  const current = activeCaption?.word;
+  if (current && activeCaption.index >= 0) {
+    selectedCaptionIndex = activeCaption.index;
     updateCaptionEditor();
     renderTimeline();
   }
   selectedLayer = layerName;
   updateLayerSelection();
-  const rect = overlayStage.getBoundingClientRect();
-  const layer = state.project.layout[layerName];
-  drag = { kind: "move", layerName, startX: event.clientX, startY: event.clientY, startPosition: { ...layer.position }, rect, element, before: projectSnapshot() };
-  element.setPointerCapture?.(event.pointerId);
 }
 
-function beginLayerResize(event, layerName, element) {
+function onStagePointerDown(event) {
+  if (!state.hasVideo) return;
+  const point = stagePoint(event);
+  const selectedBox = sceneBoxes.get(selectedSceneId());
+  const handle = selectedBox ? handleUnderPoint(point) : undefined;
+  const target = handle ? { id: selectedSceneId(), box: selectedBox } : hitTest(sceneBoxes, point.x, point.y);
+  if (!target) {
+    if (selectedOverlayId) {
+      selectedOverlayId = null;
+      renderOverlays();
+    }
+    paintStage();
+    return;
+  }
   event.preventDefault();
-  event.stopPropagation();
-  selectedLayer = layerName;
-  updateLayerSelection();
-  drag = { kind: "resize", layerName, startX: event.clientX, startY: event.clientY, startSize: state.project.layout[layerName].fontSize, rect: overlayStage.getBoundingClientRect(), element, before: projectSnapshot() };
-  element.setPointerCapture?.(event.pointerId);
-}
-
-function beginOverlayDrag(event, overlay, element) {
+  stageCanvas.setPointerCapture?.(event.pointerId);
+  const before = projectSnapshot();
+  const base = { startX: event.clientX, startY: event.clientY, rect: point.rect, before };
+  if (target.id.startsWith("caption:")) {
+    const layerName = target.id.slice("caption:".length);
+    selectCaptionLayer(layerName);
+    const layer = state.project.layout[layerName];
+    drag = handle?.name === "resize"
+      ? { ...base, kind: "resize", layerName, startSize: layer.fontSize }
+      : { ...base, kind: "move", layerName, startPosition: { ...layer.position } };
+    paintStage();
+    return;
+  }
+  const overlay = (state.project.overlays || []).find((item) => `overlay:${item.id}` === target.id);
+  if (!overlay) return;
+  if (overlay.id !== selectedOverlayId) {
+    selectedOverlayId = overlay.id;
+    selectedCaptionIndex = null;
+    syncOverlayControls();
+    updateCaptionEditor();
+    renderTimeline();
+    renderOverlays();
+    // Selecting an unselected overlay only reveals its handles; the first press
+    // must not also start a resize aimed at whatever was selected before.
+    if (handle) return;
+  }
   if (overlay.locked) return;
-  event.preventDefault();
-  const rect = overlayStage.getBoundingClientRect();
-  drag = { kind: "overlay", overlay, startX: event.clientX, startY: event.clientY, startPosition: { ...overlay.position }, rect, element, before: projectSnapshot() };
-  element.setPointerCapture?.(event.pointerId);
+  if (handle?.name === "resize") {
+    drag = { ...base, kind: "overlay-resize", overlay, startWidth: overlay.width, startHeight: overlay.height };
+  } else if (handle?.name === "rotate") {
+    const centerX = point.rect.left + ((target.box.x + target.box.width / 2) / stageCanvas.width) * point.rect.width;
+    const centerY = point.rect.top + ((target.box.y + target.box.height / 2) / stageCanvas.height) * point.rect.height;
+    drag = {
+      ...base,
+      kind: "overlay-rotate",
+      overlay,
+      centerX,
+      centerY,
+      startAngle: (Math.atan2(event.clientY - centerY, event.clientX - centerX) * 180) / Math.PI,
+      startRotation: Number(overlay.visual?.rotation || 0),
+    };
+  } else {
+    drag = { ...base, kind: "overlay", overlay, startPosition: { ...overlay.position } };
+  }
+  stageCanvas.classList.add("grabbing");
 }
 
-function beginOverlayResize(event, overlay, element) {
-  if (overlay.locked) return;
-  event.preventDefault();
-  event.stopPropagation();
-  drag = { kind: "overlay-resize", overlay, startX: event.clientX, startY: event.clientY, startWidth: overlay.width, startHeight: overlay.height, rect: overlayStage.getBoundingClientRect(), element, before: projectSnapshot() };
-  element.setPointerCapture?.(event.pointerId);
-}
-
-function beginOverlayRotate(event, overlay, element) {
-  if (overlay.locked) return;
-  event.preventDefault();
-  event.stopPropagation();
-  const rect = element.getBoundingClientRect();
-  const centerX = rect.left + rect.width / 2;
-  const centerY = rect.top + rect.height / 2;
-  drag = { kind: "overlay-rotate", overlay, centerX, centerY, startAngle: Math.atan2(event.clientY - centerY, event.clientX - centerX) * 180 / Math.PI, startRotation: Number(overlay.visual?.rotation || 0), element, before: projectSnapshot() };
-  element.setPointerCapture?.(event.pointerId);
+function onStagePointerMove(event) {
+  if (drag) return;
+  if (!state.hasVideo) return;
+  const point = stagePoint(event);
+  const overHandle = sceneBoxes.get(selectedSceneId()) ? handleUnderPoint(point) : undefined;
+  const cursor = overHandle?.name === "rotate" ? "grab" : overHandle ? "nwse-resize" : hitTest(sceneBoxes, point.x, point.y) ? "move" : "default";
+  stageCanvas.style.cursor = cursor;
 }
 
 function moveDrag(event) {
@@ -889,6 +953,7 @@ function moveDrag(event) {
 function endDrag() {
   if (drag?.before) recordHistory(drag.before);
   drag = null;
+  stageCanvas.classList.remove("grabbing");
 }
 
 function resetLayout() {
@@ -969,6 +1034,9 @@ async function loadSurahs() {
   try {
     const result = await api("/api/surahs");
     surahNames = new Map((result.surahs || []).map((surah) => [surah.number, surah.name]));
+    // The names arrive after the first paint, and a detected-chapter overlay
+    // drawn before them would read "Surah 1" in the preview and the export.
+    paintStage();
   } catch (error) {
     // Non-fatal: the detected-chapter overlay falls back to "Surah N" without this.
   }
@@ -1079,8 +1147,13 @@ async function loadFonts() {
   try {
     const result = await api("/api/fonts");
     availableFonts = (result.fonts || result || []).sort((a, b) => a.family.localeCompare(b.family));
+    // Every bundled or imported face is registered up front, not just the ones
+    // the picker happens to list: the canvas silently substitutes a default
+    // face for a family the document never loaded.
+    for (const font of availableFonts) installFontFace(font);
     renderFontOptions("arabic");
     renderFontOptions("translation");
+    paintStage();
   } catch (error) {
     setStatus(`Fonts could not be listed: ${error.message}`, true);
   }
@@ -1224,14 +1297,13 @@ function closeCaptionEditor() {
 }
 
 video.addEventListener("loadedmetadata", () => {
-  const width = video.videoWidth || 16;
-  const height = video.videoHeight || 9;
-  stage.style.aspectRatio = `${width} / ${height}`;
   playButton.disabled = false;
   timeline.disabled = false;
   updateStageGeometry();
   updatePlayer();
 });
+video.addEventListener("seeked", paintStage);
+video.addEventListener("loadeddata", paintStage);
 video.addEventListener("timeupdate", updatePlayer);
 video.addEventListener("play", () => { updatePlayer(); startCaptionPreviewAnimation(); });
 video.addEventListener("pause", () => { stopCaptionPreviewAnimation(); updatePlayer(); });
@@ -1240,10 +1312,8 @@ playButton.addEventListener("click", () => (video.paused ? video.play() : video.
 timeline.addEventListener("input", () => { video.currentTime = Number(timeline.value); updatePlayer(); });
 $("speed-select").addEventListener("change", (event) => { video.playbackRate = Number(event.target.value); });
 
-for (const [name, element] of [["arabic", arabicLayer], ["translation", translationLayer]]) {
-  element.addEventListener("pointerdown", (event) => beginLayerDrag(event, name, element));
-  element.querySelector(".resize-handle").addEventListener("pointerdown", (event) => beginLayerResize(event, name, element));
-}
+stageCanvas.addEventListener("pointerdown", onStagePointerDown);
+stageCanvas.addEventListener("pointermove", onStagePointerMove);
 document.addEventListener("pointermove", moveDrag);
 document.addEventListener("pointerup", endDrag);
 document.addEventListener("pointermove", moveTimingDrag);
@@ -1314,8 +1384,13 @@ imageInput.addEventListener("change", () => uploadImage(imageInput.files?.[0]));
 $("delete-overlay").addEventListener("click", deleteSelectedOverlay);
 transcribeButton.addEventListener("click", transcribe);
 exportSubtitles.addEventListener("click", () => exportOutput(false));
-exportVideo.addEventListener("click", () => exportOutput(true));
+exportVideo.addEventListener("click", renderVideoLocally);
+$("render-cancel").addEventListener("click", () => exportJob?.abort());
 downloadVideo.addEventListener("click", () => {
+  if (lastRender) {
+    downloadBlob(lastRender.blob, lastRender.name);
+    return;
+  }
   if (!state.outputs?.video) return;
   const link = document.createElement("a");
   link.href = state.outputs.video;
@@ -1508,7 +1583,8 @@ document.addEventListener("keydown", (event) => {
   if (modifier && lowerKey === "e") {
     event.preventDefault();
     if (!state.hasAlignment) return;
-    void exportOutput(event.shiftKey);
+    if (event.shiftKey) void renderVideoLocally();
+    else void exportOutput(false);
     return;
   }
   if (key === "Escape") {

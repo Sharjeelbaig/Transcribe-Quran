@@ -47,9 +47,9 @@
         <button id="save-project" class="button outline"><svg><use href="#i-save"/></svg><span>Save project</span></button>
         <button id="export-menu-button" class="button primary"><svg><use href="#i-export"/></svg><span>Export</span><svg class="chevron"><use href="#i-chevron"/></svg></button>
         <div id="export-menu" class="popover export-menu hidden">
+          <button id="export-video" class="menu-item" disabled><svg><use href="#i-export"/></svg><span>Export MP4 exactly as previewed</span></button>
+          <button id="download-video" class="menu-item" disabled><svg><use href="#i-download"/></svg><span>Download last export</span></button>
           <button id="export-subtitles" class="menu-item" disabled><svg><use href="#i-download"/></svg><span>Download ASS subtitles</span></button>
-          <button id="export-video" class="menu-item" disabled><svg><use href="#i-export"/></svg><span>Render captioned MP4</span></button>
-          <button id="download-video" class="menu-item" disabled><svg><use href="#i-download"/></svg><span>Download rendered MP4</span></button>
         </div>
       </div>
       <input id="video-input" type="file" accept="video/*,.mkv" hidden />
@@ -86,17 +86,7 @@
           <div id="stage-wrap" class="stage-wrap hidden">
             <div id="stage" class="stage">
               <video id="video" preload="metadata" playsinline></video>
-              <div id="overlay-stage" class="overlay-stage">
-                <div id="arabic-layer" class="caption-layer arabic-layer" data-layer="arabic">
-                  <div class="caption-content" dir="rtl"></div>
-                  <button class="resize-handle" aria-label="Resize Arabic caption"></button>
-                </div>
-                <div id="translation-layer" class="caption-layer translation-layer" data-layer="translation">
-                  <div class="caption-content" dir="ltr"></div>
-                  <button class="resize-handle" aria-label="Resize translation caption"></button>
-                </div>
-                <div id="custom-overlays"></div>
-              </div>
+              <canvas id="stage-canvas" class="stage-canvas"></canvas>
             </div>
           </div>
         </section>
@@ -114,6 +104,11 @@
           <div class="timeline-heading"><div><strong>Caption timeline</strong><span id="timeline-summary">Transcribe a video to see ayahs and words.</span></div><button id="timeline-zoom" class="icon-button quiet" data-tooltip="Timeline zoom" aria-label="Timeline zoom"><svg><use href="#i-more"/></svg></button></div>
           <div class="caption-track-scroll"><div id="caption-track" class="caption-track"><div class="track-empty">Caption events will appear here.</div></div></div>
         </section>
+        <div id="render-progress" class="render-progress hidden">
+          <div class="render-bar"><span id="render-bar-fill"></span></div>
+          <span id="render-progress-label">Rendering…</span>
+          <button id="render-cancel" class="button small outline">Cancel</button>
+        </div>
         <p id="status" class="status" role="status">Choose a video to start.</p>
       </main>
 
