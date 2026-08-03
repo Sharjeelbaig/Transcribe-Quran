@@ -38,6 +38,9 @@ let state = {
       arabicFontSize: 310,
       translationFontSize: 92,
       captionGap: 40,
+      speechPauseSeconds: 0.6,
+      minimumWordSeconds: 0.5,
+      captionHoldSeconds: 0.35,
       confidenceThreshold: 0.5,
       model: "Sharjeelbaig/whisper-tiny-ar-quran-onnx",
       dtype: "q8",
@@ -70,6 +73,7 @@ let timelineZoom = 1;
 let selectedCaptionIndex = null;
 let captionEditBefore = null;
 let timingDrag = null;
+let previewAnimationFrame = null;
 
 function icon(button, symbol) {
   if (button) button.innerHTML = `<svg><use href="#${symbol}"/></svg>`;
@@ -149,6 +153,46 @@ function applyVisual(element, visual = {}) {
   element.style.webkitTextStroke = outline ? `${outline}px ${rgba(visual.outlineColor || "#101010", visual.outlineOpacity ?? 1)}` : "";
   const shadow = visual.shadowEnabled === false ? 0 : Math.max(0, Number(visual.shadowDistance ?? 0));
   element.style.textShadow = shadow ? `${shadow}px ${shadow}px ${Math.max(1, shadow * 2)}px ${rgba(visual.shadowColor || "#000000", visual.shadowOpacity ?? 0.44)}` : "";
+  element.style.setProperty("--caption-transition-y", "0px");
+  element.style.setProperty("--caption-transition-scale", "1");
+}
+
+function transitionDuration(animation, spanSeconds) {
+  if (!animation?.preset || animation.preset === "none") return 0;
+  const maximum = Math.max(0, Math.floor(spanSeconds * 500));
+  return Math.min(maximum, Math.max(0, Math.round(Number(animation.duration ?? 250) || 0)));
+}
+
+function applyCaptionTransition(element, visual, word, now) {
+  const baseOpacity = Math.max(0, Math.min(1, Number(visual?.opacity ?? 1)));
+  const start = Number(word.displayStart ?? word.start);
+  const end = Number(word.displayEnd ?? word.end);
+  const span = Math.max(0, end - start);
+  const enter = transitionDuration(visual?.animationIn, span);
+  const exit = transitionDuration(visual?.animationOut, span);
+  const enterProgress = enter ? Math.max(0, Math.min(1, (now - start) / (enter / 1000))) : 1;
+  const exitProgress = exit ? Math.max(0, Math.min(1, (end - now) / (exit / 1000))) : 1;
+  const inPhase = enter > 0 && now < start + enter / 1000;
+  const outPhase = exit > 0 && now > end - exit / 1000;
+  const animation = inPhase ? visual?.animationIn : outPhase ? visual?.animationOut : undefined;
+  const progress = inPhase ? enterProgress : outPhase ? exitProgress : 1;
+  let opacity = baseOpacity;
+  let offsetY = 0;
+  let scale = 1;
+  const distance = Math.max(12, Math.round(element.clientHeight * 0.18));
+  if (animation?.preset === "fade") opacity *= progress;
+  if (animation?.preset === "scale") {
+    opacity *= 0.35 + 0.65 * progress;
+    scale = inPhase ? 0.82 + 0.18 * progress : 1 + 0.12 * (1 - progress);
+  }
+  if (animation?.preset === "slide-up" || animation?.preset === "slide-down") {
+    opacity *= progress;
+    const direction = animation.preset === "slide-up" ? -1 : 1;
+    offsetY = inPhase ? -direction * distance * (1 - progress) : direction * distance * (1 - progress);
+  }
+  element.style.opacity = String(opacity);
+  element.style.setProperty("--caption-transition-y", `${offsetY}px`);
+  element.style.setProperty("--caption-transition-scale", String(scale));
 }
 
 function captionEventId(word, index) {
@@ -262,6 +306,9 @@ function syncControlsFromProject() {
   $("arabic-size").value = settings.arabicFontSize;
   $("translation-size").value = settings.translationFontSize;
   $("caption-gap").value = settings.captionGap;
+  $("speech-pause").value = settings.speechPauseSeconds ?? 0.6;
+  $("min-word-seconds").value = settings.minimumWordSeconds ?? 0.5;
+  $("caption-hold").value = settings.captionHoldSeconds ?? 0.35;
   $("offline").checked = Boolean(settings.offline);
   $("model").value = settings.model;
   $("dtype").value = settings.dtype;
@@ -283,6 +330,11 @@ function syncSettingsFromControls() {
   settings.arabicFontSize = Math.max(1, Number($("arabic-size").value) || 310);
   settings.translationFontSize = Math.max(1, Number($("translation-size").value) || 92);
   settings.captionGap = Math.max(0, Number($("caption-gap").value) || 0);
+  settings.speechPauseSeconds = Math.min(5, Math.max(0.05, Number($("speech-pause").value) || 0.6));
+  settings.minimumWordSeconds = Math.min(3, Math.max(0.05, Number($("min-word-seconds").value) || 0.5));
+  // Zero is a valid hold, so an empty field falls back rather than reading as 0.
+  const hold = Number($("caption-hold").value);
+  settings.captionHoldSeconds = Math.min(3, Math.max(0, $("caption-hold").value.trim() && Number.isFinite(hold) ? hold : 0.35));
   settings.offline = $("offline").checked;
   settings.model = $("model").value.trim() || "Sharjeelbaig/whisper-tiny-ar-quran-onnx";
   settings.dtype = $("dtype").value;
@@ -311,6 +363,10 @@ function updateLayerSelection() {
   $("layer-shadow-opacity").value = Math.round((visual.shadowOpacity ?? 0.44) * 100);
   $("layer-outline-opacity-value").textContent = `${$("layer-outline-opacity").value}%`;
   $("layer-shadow-opacity-value").textContent = `${$("layer-shadow-opacity").value}%`;
+  $("layer-animation-in").value = visual.animationIn?.preset || "none";
+  $("layer-animation-out").value = visual.animationOut?.preset || "none";
+  $("layer-animation-in-duration").value = visual.animationIn?.duration ?? 250;
+  $("layer-animation-out-duration").value = visual.animationOut?.duration ?? 250;
   arabicLayer.classList.toggle("selected", selectedLayer === "arabic");
   translationLayer.classList.toggle("selected", selectedLayer === "translation");
 }
@@ -384,6 +440,8 @@ function renderCaption() {
   arabicLayer.querySelector(".caption-content").innerHTML = `<span class="arabic-line">${ordered.map((word) => `<span class="arabic-word${word.position === current.position ? " active" : ""}">${escapeHtml(word.arabic)}</span>`).join("")}</span>`;
   translationLayer.querySelector(".caption-content").textContent = `${current.wordTranslation}  •  ${current.verseKey}`;
   updateStageGeometry();
+  applyCaptionTransition(arabicLayer, state.project.layout.arabic.visual, current, now);
+  applyCaptionTransition(translationLayer, state.project.layout.translation.visual, current, now);
 }
 
 function updatePlayer() {
@@ -402,6 +460,24 @@ function updatePlayer() {
   });
   renderCaption();
   renderOverlays();
+}
+
+function animateCaptionPreview() {
+  if (video.paused || video.ended) {
+    previewAnimationFrame = null;
+    return;
+  }
+  renderCaption();
+  previewAnimationFrame = requestAnimationFrame(animateCaptionPreview);
+}
+
+function startCaptionPreviewAnimation() {
+  if (previewAnimationFrame === null) previewAnimationFrame = requestAnimationFrame(animateCaptionPreview);
+}
+
+function stopCaptionPreviewAnimation() {
+  if (previewAnimationFrame !== null) cancelAnimationFrame(previewAnimationFrame);
+  previewAnimationFrame = null;
 }
 
 function renderTimeline() {
@@ -1030,9 +1106,9 @@ video.addEventListener("loadedmetadata", () => {
   updatePlayer();
 });
 video.addEventListener("timeupdate", updatePlayer);
-video.addEventListener("play", updatePlayer);
-video.addEventListener("pause", updatePlayer);
-video.addEventListener("ended", updatePlayer);
+video.addEventListener("play", () => { updatePlayer(); startCaptionPreviewAnimation(); });
+video.addEventListener("pause", () => { stopCaptionPreviewAnimation(); updatePlayer(); });
+video.addEventListener("ended", () => { stopCaptionPreviewAnimation(); updatePlayer(); });
 playButton.addEventListener("click", () => (video.paused ? video.play() : video.pause()));
 timeline.addEventListener("input", () => { video.currentTime = Number(timeline.value); updatePlayer(); });
 $("speed-select").addEventListener("change", (event) => { video.playbackRate = Number(event.target.value); });
@@ -1054,7 +1130,7 @@ document.querySelectorAll("[data-select-layer]").forEach((button) => button.addE
 }));
 $("reset-layout").addEventListener("click", resetLayout);
 $("apply-layer-position").addEventListener("click", applyLayerPosition);
-for (const id of ["layer-opacity", "layer-rotation", "layer-outline", "layer-shadow", "layer-outline-color", "layer-shadow-color", "layer-outline-enabled", "layer-shadow-enabled", "layer-outline-opacity", "layer-shadow-opacity"]) {
+for (const id of ["layer-opacity", "layer-rotation", "layer-outline", "layer-shadow", "layer-outline-color", "layer-shadow-color", "layer-outline-enabled", "layer-shadow-enabled", "layer-outline-opacity", "layer-shadow-opacity", "layer-animation-in", "layer-animation-out", "layer-animation-in-duration", "layer-animation-out-duration"]) {
   $(id).addEventListener("input", () => {
     const visual = visualFor(currentLayer());
     visual.opacity = Number($("layer-opacity").value) / 100;
@@ -1067,9 +1143,18 @@ for (const id of ["layer-opacity", "layer-rotation", "layer-outline", "layer-sha
     visual.shadowEnabled = $("layer-shadow-enabled").checked;
     visual.outlineOpacity = Number($("layer-outline-opacity").value) / 100;
     visual.shadowOpacity = Number($("layer-shadow-opacity").value) / 100;
+    visual.animationIn = {
+      preset: $("layer-animation-in").value,
+      duration: Math.min(5000, Math.max(0, Number($("layer-animation-in-duration").value) || 0)),
+    };
+    visual.animationOut = {
+      preset: $("layer-animation-out").value,
+      duration: Math.min(5000, Math.max(0, Number($("layer-animation-out-duration").value) || 0)),
+    };
     $("layer-outline-opacity-value").textContent = `${$("layer-outline-opacity").value}%`;
     $("layer-shadow-opacity-value").textContent = `${$("layer-shadow-opacity").value}%`;
     updateStageGeometry();
+    renderCaption();
   });
 }
 $("timeline-zoom").addEventListener("click", () => {
@@ -1142,7 +1227,7 @@ $("undo-button").addEventListener("click", undo);
 $("redo-button").addEventListener("click", redo);
 $("theme-toggle").addEventListener("click", toggleTheme);
 
-for (const id of ["translation", "words", "arabic-font", "translation-font", "arabic-size", "translation-size", "caption-gap", "offline", "model", "dtype", "confidence"]) {
+for (const id of ["translation", "words", "arabic-font", "translation-font", "arabic-size", "translation-size", "caption-gap", "speech-pause", "offline", "model", "dtype", "confidence"]) {
   $(id).addEventListener("input", () => { syncSettingsFromControls(); updateStageGeometry(); });
   $(id).addEventListener("change", () => { syncSettingsFromControls(); updateStageGeometry(); });
 }

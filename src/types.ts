@@ -94,7 +94,7 @@ export interface MatchedTranscriptWord extends TranscriptWord {
   inferredTiming?: boolean;
 }
 
-export type TimingSource = "recognizer" | "refined" | "guard-fallback" | "inferred";
+export type TimingSource = "recognizer" | "refined" | "guard-fallback" | "inferred" | "forced";
 
 export interface AlignedWord {
   start: number;
@@ -117,6 +117,8 @@ export interface AlignedWord {
   displayStart?: number;
   displayEnd?: number;
   timingSource?: TimingSource;
+  /** True when the reciter stops after this word, so it may linger on screen. */
+  endsSpeechSegment?: boolean;
 }
 
 export interface AlignmentDocument {
@@ -136,9 +138,26 @@ export interface AlignmentDocument {
     averageConfidence: number;
     timingFrameRate?: number;
     minimumCaptionFrames?: number;
+    speechPauseSeconds?: number;
+    speechExtendedWords?: number;
     refinementFallbackWords?: number;
     displayExtendedWords?: number;
     maximumDisplayShiftSeconds?: number;
+    minimumDisplaySeconds?: number;
+    belowMinimumWords?: number;
+    speechSegments?: number;
+    voicedSeconds?: number;
+    /** Speech time, in seconds, with no caption on screen. */
+    uncoveredSpeechSeconds?: number;
+    /** Phrases the reciter's pauses divided the recording into. */
+    phrases?: number;
+    /** Phrases whose word timings were measured by forced alignment. */
+    forcedPhrases?: number;
+    /** Phrases that fell back to spreading the passage evenly. */
+    estimatedPhrases?: number;
+    /** Phrases no canonical passage could be identified for. */
+    unmatchedPhrases?: number;
+    tempo?: number;
   };
 }
 
@@ -165,6 +184,19 @@ export interface ProcessOptions {
   frameRate?: number;
   /** Minimum number of video frames each caption should remain visible. */
   minimumCaptionFrames?: number;
+  /** Absolute floor, in seconds, on how long each caption stays readable. */
+  minimumWordSeconds?: number;
+  /** Extra time a caption lingers into the silence after the reciter stops. */
+  captionHoldSeconds?: number;
+  /** How far reaching the minimum may delay a later caption. */
+  maximumCaptionDriftSeconds?: number;
+  /** Quiet-audio duration required before the reciter is considered to have stopped. */
+  speechPauseSeconds?: number;
+  /**
+   * Playback rate applied to each phrase before recognition, undone afterwards.
+   * Measured accuracy falls off sharply below 1.0, so the default is 1.0.
+   */
+  tempo?: number;
   confidenceThreshold: number;
   burnVideo: boolean;
   offline: boolean;

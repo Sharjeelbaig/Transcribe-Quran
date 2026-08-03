@@ -5,7 +5,7 @@ import {
   DEFAULT_TRANSLATION_FONT_NAME,
   DEFAULT_TRANSLATION_FONT_SIZE,
 } from "../captions/ass.js";
-import { DEFAULT_MODEL } from "../model/transcriber.js";
+import { DEFAULT_MODEL } from "../model/session.js";
 import type { AlignmentDocument, AlignedWord, TranslationKey } from "../types.js";
 
 export const PROJECT_SCHEMA_VERSION = 1 as const;
@@ -20,6 +20,12 @@ export interface UiCaptionSettings {
   arabicFontSize: number;
   translationFontSize: number;
   captionGap: number;
+  /** Sustained quiet audio required before a reciter is considered stopped. */
+  speechPauseSeconds: number;
+  /** Absolute floor on how long each caption stays readable. */
+  minimumWordSeconds: number;
+  /** Extra time a caption lingers into the silence after the reciter stops. */
+  captionHoldSeconds: number;
   confidenceThreshold: number;
   model: string;
   dtype: "fp32" | "fp16" | "q8" | "q4";
@@ -174,6 +180,9 @@ export function defaultUiSettings(): UiCaptionSettings {
     arabicFontSize: DEFAULT_ARABIC_FONT_SIZE,
     translationFontSize: DEFAULT_TRANSLATION_FONT_SIZE,
     captionGap: DEFAULT_CAPTION_GAP,
+    speechPauseSeconds: 0.6,
+    minimumWordSeconds: 0.5,
+    captionHoldSeconds: 0.35,
     confidenceThreshold: 0.5,
     model: DEFAULT_MODEL,
     dtype: "q8",

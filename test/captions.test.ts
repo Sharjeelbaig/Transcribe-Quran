@@ -93,6 +93,69 @@ describe("ASS caption generation", () => {
     expect(ass).toContain("Dialogue: 0,0:00:00.50,0:00:00.62,Quran");
   });
 
+  it("never stretches a solved display window into the caption after it", () => {
+    // The timing guard shortens a caption below the minimum when the reciter
+    // is too fast to hold it any longer. Honouring the minimum here anyway
+    // would draw two Arabic words on screen at once.
+    const canonical = index.words[0]!;
+    const base = {
+      surah: canonical.surah,
+      verse: canonical.verse,
+      verseKey: canonical.verseKey,
+      arabic: canonical.word.text.uthmani,
+      imlaei: canonical.word.text.imlaei,
+      wordTranslation: canonical.word.translation,
+      verseTranslation: canonical.verseData.translations.saheehInternational,
+      confidence: 1,
+      inferredTiming: false,
+    };
+    const words: AlignedWord[] = [
+      { ...base, position: 1, canonicalIndex: canonical.index, start: 1, end: 1.2, displayStart: 1, displayEnd: 1.2 },
+      { ...base, position: 2, canonicalIndex: canonical.index + 1, start: 1.2, end: 1.9, displayStart: 1.2, displayEnd: 1.9 },
+    ];
+
+    const ass = createAss(words, index, 1, { minimumDisplaySeconds: 0.5 });
+    const spans = ass
+      .split("\n")
+      .filter((line) => line.includes(",Quran,"))
+      .map((line) => line.slice(10).split(",").slice(0, 3));
+
+    expect(spans[0]?.[2]).toBe("0:00:01.20");
+    expect(spans[1]?.[1]).toBe("0:00:01.20");
+  });
+
+  it("renders independently timed caption transitions without changing the measured window", () => {
+    const canonical = index.words[0]!;
+    const word: AlignedWord = {
+      start: 0.4,
+      end: 1.2,
+      surah: canonical.surah,
+      verse: canonical.verse,
+      verseKey: canonical.verseKey,
+      position: canonical.position,
+      arabic: canonical.word.text.uthmani,
+      imlaei: canonical.word.text.imlaei,
+      wordTranslation: canonical.word.translation,
+      verseTranslation: canonical.verseData.translations.saheehInternational,
+      confidence: 1,
+      inferredTiming: false,
+      canonicalIndex: canonical.index,
+    };
+
+    const ass = createAss([word], index, 1, {
+      arabicVisual: {
+        animationIn: { preset: "fade", duration: 120 },
+        animationOut: { preset: "scale", duration: 180 },
+      },
+    });
+
+    expect(ass).toContain("Dialogue: 0,0:00:00.40,0:00:00.52,Quran");
+    expect(ass).toContain("\\alpha&HFF&\\t(0,120,\\alpha&H00&)");
+    expect(ass).toContain("Dialogue: 0,0:00:01.02,0:00:01.20,Quran");
+    expect(ass).toContain("\\t(0,180,\\fscx112\\fscy112\\alpha&HFF&)");
+    expect(ass).toContain("Dialogue: 1,0:00:00.40,0:00:01.20,Translation");
+  });
+
   it("rejects a negative caption gap", () => {
     expect(() => createAss([], index, 1, { captionGap: -1 })).toThrow("non-negative number");
   });

@@ -24,6 +24,19 @@ interface CandidateAlignment {
 const WINDOW_WORDS = 12;
 const CONTINUITY_GAP_SECONDS = 3;
 const MAX_INFERRED_WORD_SECONDS = 4;
+/**
+ * Longest run of recognizer-skipped words that is still safe to restore. The
+ * words themselves are certain, since they are the canonical text between two
+ * confident anchors; only their timing is estimated, so a generous limit is
+ * still preferable to leaving the screen blank while they are recited.
+ */
+const MAX_GAP_WORDS = 16;
+/** Smallest measured interval given to a restored word before display timing. */
+const MINIMUM_INFERRED_SECONDS = 0.12;
+/** How far behind the expected position a window must land to count as a return. */
+const BACKWARD_RETURN_WORDS = 2;
+/** Confidence a backwards jump needs before it is treated as a real return. */
+const BACKWARD_RETURN_CONFIDENCE = 0.55;
 const MAX_POSTINGS_PER_TOKEN = 512;
 const MAX_CANDIDATES = 36;
 
@@ -204,21 +217,35 @@ export interface MatchResult {
   matched: MatchedTranscriptWord[];
   unmatchedWindows: number;
   windowScores: number[];
+  /**
+   * Where the reciter is expected to continue. Passing this into the next call
+   * lets a caller that matches one phrase at a time keep the same continuity a
+   * single whole-transcript call would have had.
+   */
+  expectedCanonical?: number;
+}
+
+export interface MatchOptions {
+  /** Canonical position the passage is expected to continue from. */
+  expectedCanonical?: number;
 }
 
 export function matchTranscript(
   transcript: TranscriptWord[],
   index: QuranIndex,
   confidenceThreshold = 0.5,
+  options: MatchOptions = {},
 ): MatchResult {
   const matched: MatchedTranscriptWord[] = [];
   const windowScores: number[] = [];
   let unmatchedWindows = 0;
-  let expectedCanonical: number | undefined;
+  let expectedCanonical: number | undefined = options.expectedCanonical;
 
   const windows: Array<{ words: TranscriptWord[]; resetContinuity: boolean }> = [];
   let current: TranscriptWord[] = [];
-  let resetContinuity = true;
+  // Continuity supplied by the caller must survive the first window, or a
+  // phrase-at-a-time caller would lose the context it just established.
+  let resetContinuity = options.expectedCanonical === undefined;
   for (const word of transcript) {
     const previous = current.at(-1);
     const hasLongGap = previous !== undefined && word.start - previous.end >= CONTINUITY_GAP_SECONDS;
@@ -278,9 +305,19 @@ export function matchTranscript(
       continue;
     }
 
-    const acceptedMappings = best.mappings.filter(
-      (mapping) => continuityFloor === undefined || mapping.canonicalIndex >= continuityFloor,
-    );
+    // Every rak'ah returns to al-Fatiha, and reciters repeat an ayah they want
+    // to dwell on. The continuity floor exists to stop a word being re-matched
+    // just behind the passage in progress, not to forbid those returns. When a
+    // whole window lands confidently before the floor, it is a return: accept
+    // it in full and continue from there instead of discarding every word.
+    const returnedToEarlierPassage =
+      continuityFloor !== undefined &&
+      best.end < continuityFloor - BACKWARD_RETURN_WORDS &&
+      best.confidence >= Math.max(confidenceThreshold, BACKWARD_RETURN_CONFIDENCE);
+    const acceptedMappings =
+      continuityFloor === undefined || returnedToEarlierPassage
+        ? best.mappings
+        : best.mappings.filter((mapping) => mapping.canonicalIndex >= continuityFloor);
     const firstMapping = acceptedMappings[0];
     if (best.confidence >= 0.75 && firstMapping && firstMapping.transcriptIndex > 0) {
       const firstCanonical = index.words[firstMapping.canonicalIndex];
@@ -371,11 +408,18 @@ export function matchTranscript(
       }
     }
 
-    expectedCanonical = Math.max(continuityFloor ?? 0, acceptedEnd + 1);
+    expectedCanonical = returnedToEarlierPassage
+      ? acceptedEnd + 1
+      : Math.max(continuityFloor ?? 0, acceptedEnd + 1);
     windowScores.push(best.confidence);
   }
 
-  return { matched, unmatchedWindows, windowScores };
+  return {
+    matched,
+    unmatchedWindows,
+    windowScores,
+    ...(expectedCanonical !== undefined ? { expectedCanonical } : {}),
+  };
 }
 
 function toAlignedWord(
@@ -417,13 +461,30 @@ export function materializeAlignedWords(
     const previous = output.at(-1);
     if (previous) {
       const missingCount = current.canonicalIndex - previous.canonicalIndex - 1;
-      const availableTime = current.start - previous.end;
       if (
         missingCount > 0 &&
-        missingCount <= 5 &&
-        availableTime >= missingCount * 0.06 &&
-        availableTime / missingCount <= MAX_INFERRED_WORD_SECONDS
+        missingCount <= MAX_GAP_WORDS &&
+        current.start - previous.end <= missingCount * MAX_INFERRED_WORD_SECONDS
       ) {
+        // A word the recognizer skipped was still recited. Rather than drop it
+        // from the Qur'an text, take the room it needs from the neighbouring
+        // words, which are the two whose boundaries absorbed it.
+        const needed = missingCount * MINIMUM_INFERRED_SECONDS;
+        let deficit = needed - (current.start - previous.end);
+        if (deficit > 0) {
+          const fromPrevious = Math.min(
+            deficit / 2,
+            Math.max(0, previous.end - previous.start - MINIMUM_INFERRED_SECONDS),
+          );
+          previous.end -= fromPrevious;
+          deficit -= fromPrevious;
+          const fromCurrent = Math.min(
+            deficit,
+            Math.max(0, current.end - current.start - MINIMUM_INFERRED_SECONDS),
+          );
+          current.start += fromCurrent;
+        }
+        const availableTime = Math.max(missingCount * 0.01, current.start - previous.end);
         const duration = availableTime / missingCount;
         for (let missing = 1; missing <= missingCount; missing += 1) {
           const canonicalIndex = previous.canonicalIndex + missing;

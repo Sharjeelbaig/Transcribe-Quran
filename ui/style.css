@@ -93,7 +93,7 @@ svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-lineca
 .stage { position: relative; width: min(100%, 1120px); max-height: 650px; background: #000; overflow: hidden; }
 .stage video { display: block; width: 100%; height: auto; background: #000; }
 .overlay-stage { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.caption-layer, .custom-overlay { position: absolute; transform: translate(-50%, -50%) rotate(var(--layer-rotation, 0deg)); transform-origin: center; pointer-events: auto; user-select: none; text-align: center; white-space: nowrap; text-shadow: 0 2px 3px rgba(0,0,0,.95), 0 0 2px #000; }
+.caption-layer, .custom-overlay { position: absolute; transform: translate(-50%, -50%) translateY(var(--caption-transition-y, 0px)) scale(var(--caption-transition-scale, 1)) rotate(var(--layer-rotation, 0deg)); transform-origin: center; pointer-events: auto; user-select: none; text-align: center; white-space: nowrap; text-shadow: 0 2px 3px rgba(0,0,0,.95), 0 0 2px #000; }
 .caption-layer { padding: 5px 12px; border: 1px solid transparent; border-radius: 5px; cursor: move; }
 .caption-layer.selected { border-color: var(--accent); background: rgba(255,255,255,.08); }
 .caption-content { line-height: 1.08; }
@@ -176,6 +176,13 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 .button-row { display: flex; gap: 6px; }
 .button-row .button { flex: 1; }
 .subsection { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.advanced-settings { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--border); }
+.advanced-settings summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: var(--text); font-size: 11px; font-weight: 700; list-style: none; }
+.advanced-settings summary::-webkit-details-marker { display: none; }
+.advanced-settings summary::before { width: 13px; margin-right: 6px; color: var(--muted); content: "›"; font-size: 16px; font-weight: 500; line-height: 1; transition: transform .15s ease; }
+.advanced-settings[open] summary::before { transform: rotate(90deg); }
+.advanced-settings summary span { margin-left: auto; color: var(--faint); font-size: 10px; font-weight: 500; }
+.advanced-settings .hint { margin-top: 9px; }
 .caption-editor { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
 .caption-editor-title { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; font-weight: 500; }
 .caption-editor-meta { margin-top: -8px; color: var(--faint); font-size: 10px; }

@@ -21,6 +21,8 @@ import {
   projectWithVideo,
   type UiCaptionEdit,
   type UiCaptionSettings,
+  type UiLayerAnimation,
+  type UiLayerVisual,
   type UiProject,
   type UiOverlay,
 } from "./project.js";
@@ -277,6 +279,15 @@ function mergeSettings(base: UiCaptionSettings, incoming: Partial<UiCaptionSetti
     ...(incoming.captionGap !== undefined
       ? { captionGap: numeric(incoming.captionGap, "captionGap", 0) }
       : {}),
+    ...(incoming.speechPauseSeconds !== undefined
+      ? { speechPauseSeconds: numeric(incoming.speechPauseSeconds, "speechPauseSeconds", 0.05) }
+      : {}),
+    ...(incoming.minimumWordSeconds !== undefined
+      ? { minimumWordSeconds: numeric(incoming.minimumWordSeconds, "minimumWordSeconds", 0.05) }
+      : {}),
+    ...(incoming.captionHoldSeconds !== undefined
+      ? { captionHoldSeconds: numeric(incoming.captionHoldSeconds, "captionHoldSeconds", 0) }
+      : {}),
     ...(incoming.confidenceThreshold !== undefined
       ? { confidenceThreshold: numeric(incoming.confidenceThreshold, "confidenceThreshold", 0) }
       : {}),
@@ -290,6 +301,43 @@ function mergeSettings(base: UiCaptionSettings, incoming: Partial<UiCaptionSetti
   if (!dtypes.includes(next.dtype)) {
     throw new Error("dtype must be one of fp32, fp16, q8, or q4.");
   }
+  return next;
+}
+
+const ANIMATION_PRESETS = ["none", "fade", "slide-up", "slide-down", "scale"] as const;
+
+function layerAnimation(value: unknown, label: string): UiLayerAnimation | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an animation object.`);
+  const animation = value as { preset?: unknown; duration?: unknown };
+  if (typeof animation.preset !== "string" || !ANIMATION_PRESETS.includes(animation.preset as (typeof ANIMATION_PRESETS)[number])) {
+    throw new Error(`${label}.preset is not supported.`);
+  }
+  return {
+    preset: animation.preset as UiLayerAnimation["preset"],
+    duration: animation.duration === undefined ? 250 : clamp(numeric(animation.duration, `${label}.duration`, 0), 0, 5000),
+  };
+}
+
+function layerVisual(value: unknown, label: string): UiLayerVisual | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object.`);
+  const visual = value as Record<string, unknown>;
+  const next: UiLayerVisual = {};
+  if (visual.opacity !== undefined) next.opacity = clamp(numeric(visual.opacity, `${label}.opacity`, 0), 0, 1);
+  if (visual.rotation !== undefined) next.rotation = numeric(visual.rotation, `${label}.rotation`, -3600);
+  if (visual.outlineColor !== undefined) next.outlineColor = String(visual.outlineColor).slice(0, 32);
+  if (visual.outlineWidth !== undefined) next.outlineWidth = clamp(numeric(visual.outlineWidth, `${label}.outlineWidth`, 0), 0, 20);
+  if (visual.outlineEnabled !== undefined) next.outlineEnabled = Boolean(visual.outlineEnabled);
+  if (visual.outlineOpacity !== undefined) next.outlineOpacity = clamp(numeric(visual.outlineOpacity, `${label}.outlineOpacity`, 0), 0, 1);
+  if (visual.shadowColor !== undefined) next.shadowColor = String(visual.shadowColor).slice(0, 32);
+  if (visual.shadowOpacity !== undefined) next.shadowOpacity = clamp(numeric(visual.shadowOpacity, `${label}.shadowOpacity`, 0), 0, 1);
+  if (visual.shadowDistance !== undefined) next.shadowDistance = clamp(numeric(visual.shadowDistance, `${label}.shadowDistance`, 0), 0, 20);
+  if (visual.shadowEnabled !== undefined) next.shadowEnabled = Boolean(visual.shadowEnabled);
+  const animationIn = layerAnimation(visual.animationIn, `${label}.animationIn`);
+  const animationOut = layerAnimation(visual.animationOut, `${label}.animationOut`);
+  if (animationIn) next.animationIn = animationIn;
+  if (animationOut) next.animationOut = animationOut;
   return next;
 }
 
@@ -352,8 +400,8 @@ function assVisual(visual: UiOverlay["visual"] | UiProject["layout"]["arabic"]["
     ...(visual.shadowOpacity !== undefined ? { shadowOpacity: visual.shadowOpacity } : {}),
     ...(visual.shadowDistance !== undefined ? { shadowDistance: visual.shadowDistance } : {}),
     ...(visual.shadowEnabled !== undefined ? { shadowEnabled: visual.shadowEnabled } : {}),
-    ...(visual.animationIn?.preset === "fade" || visual.animationIn?.preset === "none" ? { animationIn: { preset: visual.animationIn.preset, ...(visual.animationIn.duration !== undefined ? { duration: visual.animationIn.duration } : {}) } } : {}),
-    ...(visual.animationOut?.preset === "fade" || visual.animationOut?.preset === "none" ? { animationOut: { preset: visual.animationOut.preset, ...(visual.animationOut.duration !== undefined ? { duration: visual.animationOut.duration } : {}) } } : {}),
+    ...(visual.animationIn ? { animationIn: { preset: visual.animationIn.preset, ...(visual.animationIn.duration !== undefined ? { duration: visual.animationIn.duration } : {}) } } : {}),
+    ...(visual.animationOut ? { animationOut: { preset: visual.animationOut.preset, ...(visual.animationOut.duration !== undefined ? { duration: visual.animationOut.duration } : {}) } } : {}),
   };
 }
 
@@ -389,6 +437,12 @@ function bodyProject(base: UiProject, incoming: unknown): UiProject {
   if (!incoming || typeof incoming !== "object") throw new Error("Project must be an object.");
   const value = incoming as Partial<UiProject> & { settings?: Partial<UiCaptionSettings> };
   const layout = value.layout;
+  const arabicVisual = layout?.arabic?.visual !== undefined
+    ? layerVisual(layout.arabic.visual, "layout.arabic.visual")
+    : base.layout.arabic.visual;
+  const translationVisual = layout?.translation?.visual !== undefined
+    ? layerVisual(layout.translation.visual, "layout.translation.visual")
+    : base.layout.translation.visual;
   const next: UiProject = {
     ...base,
     settings: mergeSettings(base.settings, value.settings ?? {}),
@@ -396,10 +450,12 @@ function bodyProject(base: UiProject, incoming: unknown): UiProject {
       arabic: {
         position: designPosition(layout?.arabic?.position, "layout.arabic.position"),
         fontSize: numeric(layout?.arabic?.fontSize, "layout.arabic.fontSize", 0.1),
+        ...(arabicVisual !== undefined ? { visual: arabicVisual } : {}),
       },
       translation: {
         position: designPosition(layout?.translation?.position, "layout.translation.position"),
         fontSize: numeric(layout?.translation?.fontSize, "layout.translation.fontSize", 0.1),
+        ...(translationVisual !== undefined ? { visual: translationVisual } : {}),
       },
     },
     overlays: Array.isArray(value.overlays) ? value.overlays.slice(0, 100) : [],
@@ -485,6 +541,9 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
         fontSize: settings.arabicFontSize,
         translationFontSize: settings.translationFontSize,
         captionGap: settings.captionGap,
+        speechPauseSeconds: settings.speechPauseSeconds,
+        minimumWordSeconds: settings.minimumWordSeconds,
+        captionHoldSeconds: settings.captionHoldSeconds,
         confidenceThreshold: settings.confidenceThreshold,
         burnVideo: false,
         offline: settings.offline,
@@ -493,14 +552,18 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
       });
       await readAlignment();
       const timing = result.alignment.diagnostics;
-      const repairs = timing.refinementFallbackWords ?? 0;
-      const extensions = timing.displayExtendedWords ?? 0;
-      job = {
-        status: "complete",
-        message: repairs || extensions
-          ? `Transcription complete. Frame-safe timing restored ${repairs} interval(s) and extended ${extensions} display window(s).`
-          : "Transcription and Qur'an matching complete.",
-      };
+      const phrases = timing.phrases ?? 0;
+      const forced = timing.forcedPhrases ?? 0;
+      const unmatched = timing.unmatchedPhrases ?? 0;
+      const voiced = timing.voicedSeconds ?? 0;
+      const covered = voiced > 0 ? (1 - (timing.uncoveredSpeechSeconds ?? 0) / voiced) * 100 : 100;
+      const parts = [
+        `Matched ${timing.matchedWords} Qur'an words across ${phrases} phrase${phrases === 1 ? "" : "s"}.`,
+        `${forced} phrase${forced === 1 ? "" : "s"} had word timings measured against the audio.`,
+        `${covered.toFixed(1)}% of the recitation is captioned.`,
+      ];
+      if (unmatched) parts.push(`${unmatched} phrase${unmatched === 1 ? "" : "s"} could not be identified.`);
+      job = { status: "complete", message: parts.join(" ") };
     } catch (error) {
       job = { status: "error", message: error instanceof Error ? error.message : String(error) };
     }

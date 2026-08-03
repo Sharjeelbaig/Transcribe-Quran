@@ -60,8 +60,15 @@ export interface AssLayerVisual {
   shadowOpacity?: number;
   shadowDistance?: number;
   shadowEnabled?: boolean;
-  animationIn?: { preset?: "none" | "fade"; duration?: number };
-  animationOut?: { preset?: "none" | "fade"; duration?: number };
+  animationIn?: AssLayerAnimation;
+  animationOut?: AssLayerAnimation;
+}
+
+export type AssAnimationPreset = "none" | "fade" | "slide-up" | "slide-down" | "scale";
+
+export interface AssLayerAnimation {
+  preset?: AssAnimationPreset;
+  duration?: number;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -89,12 +96,87 @@ function visualStyle(visual: AssLayerVisual | undefined, defaults: { outline: nu
   };
 }
 
-function animationTag(visual: AssLayerVisual | undefined, start: number, end: number): string {
-  const durationMs = Math.max(80, Math.round((end - start) * 500));
-  const inDuration = visual?.animationIn?.preset === "fade" ? clamp(Math.round(visual.animationIn.duration ?? 250), 0, durationMs) : 0;
-  const outDuration = visual?.animationOut?.preset === "fade" ? clamp(Math.round(visual.animationOut.duration ?? 250), 0, durationMs) : 0;
+function animationDuration(animation: AssLayerAnimation | undefined, spanSeconds: number): number {
+  if (!animation?.preset || animation.preset === "none") return 0;
+  // Entry and exit are deliberately capped at half the event. That avoids a
+  // transition hiding the whole word while leaving the measured speech window
+  // intact; the user-selected duration is otherwise honored.
+  const maximum = Math.max(0, Math.floor(spanSeconds * 500));
+  return clamp(Math.round(animation.duration ?? 250), 0, maximum);
+}
+
+type AnimationPhase = "base" | "enter" | "exit";
+
+interface AnimationSegment {
+  start: number;
+  end: number;
+  phase: AnimationPhase;
+  animation?: AssLayerAnimation;
+}
+
+function animationSegments(visual: AssLayerVisual | undefined, start: number, end: number): AnimationSegment[] {
+  const span = Math.max(0, end - start);
+  const enterAnimation = visual?.animationIn;
+  const exitAnimation = visual?.animationOut;
+  const enterDuration = animationDuration(enterAnimation, span);
+  const exitDuration = animationDuration(exitAnimation, span);
+  const enterEnd = start + enterDuration / 1000;
+  const exitStart = end - exitDuration / 1000;
+  const segments: AnimationSegment[] = [];
+  if (enterDuration > 0 && enterAnimation) segments.push({ start, end: enterEnd, phase: "enter", animation: enterAnimation });
+  if (exitStart - enterEnd >= 0.01) segments.push({ start: enterEnd, end: exitStart, phase: "base" });
+  if (exitDuration > 0 && exitAnimation) segments.push({ start: exitStart, end, phase: "exit", animation: exitAnimation });
+  if (!segments.length) segments.push({ start, end, phase: "base" });
+  return segments;
+}
+
+function alphaTag(opacity: number | undefined): string {
+  const alpha = Math.round((1 - clamp(opacity ?? 1, 0, 1)) * 255).toString(16).padStart(2, "0").toUpperCase();
+  return `&H${alpha}&`;
+}
+
+function transitionTag(
+  position: AssPosition,
+  fontSize: number,
+  visual: AssLayerVisual | undefined,
+  phase: AnimationPhase,
+  animation: AssLayerAnimation | undefined,
+  spanSeconds: number,
+): string {
   const rotation = Number.isFinite(visual?.rotation) && visual?.rotation ? `\\frz${visual.rotation}` : "";
-  return `${rotation}${inDuration || outDuration ? `\\fad(${inDuration},${outDuration})` : ""}`;
+  const basePosition = `\\pos(${position.x},${position.y})`;
+  if (phase === "base" || !animation?.preset || animation.preset === "none") return `\\an5${basePosition}${rotation}`;
+
+  const duration = Math.max(0, Math.round(spanSeconds * 1000));
+  const baseAlpha = alphaTag(visual?.opacity);
+  const transparent = "&HFF&";
+  const distance = Math.max(18, Math.round(fontSize * 0.18));
+  const movingUp = animation.preset === "slide-up";
+  const direction = movingUp ? -1 : 1;
+  const startY = position.y - direction * distance;
+  const endY = position.y + direction * distance;
+
+  if (animation.preset === "slide-up" || animation.preset === "slide-down") {
+    const move = phase === "enter"
+      ? `\\move(${position.x},${startY},${position.x},${position.y},0,${duration})`
+      : `\\move(${position.x},${position.y},${position.x},${endY},0,${duration})`;
+    const alpha = phase === "enter"
+      ? `\\alpha${transparent}\\t(0,${duration},\\alpha${baseAlpha})`
+      : `\\t(0,${duration},\\alpha${transparent})`;
+    return `\\an5${move}${rotation}${alpha}`;
+  }
+
+  if (animation.preset === "scale") {
+    const scale = phase === "enter"
+      ? `\\fscx82\\fscy82\\alpha${transparent}\\t(0,${duration},\\fscx100\\fscy100\\alpha${baseAlpha})`
+      : `\\t(0,${duration},\\fscx112\\fscy112\\alpha${transparent})`;
+    return `\\an5${basePosition}${rotation}${scale}`;
+  }
+
+  const fade = phase === "enter"
+    ? `\\alpha${transparent}\\t(0,${duration},\\alpha${baseAlpha})`
+    : `\\t(0,${duration},\\alpha${transparent})`;
+  return `\\an5${basePosition}${rotation}${fade}`;
 }
 
 function captionPositions(
@@ -221,17 +303,25 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
   const events: string[] = [];
   for (const word of words) {
+    // A supplied display window has already been solved to be ordered,
+    // non-overlapping, and as long as the recitation allows. Re-applying a
+    // minimum here would stretch a caption the solver deliberately shortened,
+    // and push it over the one after it.
+    const solved = word.displayStart !== undefined && word.displayEnd !== undefined;
     const captionStart = word.displayStart ?? word.start;
-    const measuredEnd = word.displayEnd ?? word.end;
-    const captionEnd = Math.max(measuredEnd, captionStart + minimumDisplaySeconds);
-    const start = assTime(captionStart);
-    const end = assTime(captionEnd);
-    events.push(
-      `Dialogue: 0,${start},${end},Quran,,0,0,0,,{\\an5\\pos(${arabicPosition.x},${arabicPosition.y})${animationTag(options.arabicVisual, captionStart, captionEnd)}}${contextLine(word, index, wordsPerCaption)}`,
-    );
-    events.push(
-      `Dialogue: 1,${start},${end},Translation,,0,0,0,,{\\an5\\pos(${translationPosition.x},${translationPosition.y})${animationTag(options.translationVisual, captionStart, captionEnd)}}${escapeAss(word.wordTranslation)}  •  ${word.verseKey}`,
-    );
+    const captionEnd = solved
+      ? Math.max(word.displayEnd!, captionStart)
+      : Math.max(word.end, captionStart + minimumDisplaySeconds);
+    for (const segment of animationSegments(options.arabicVisual, captionStart, captionEnd)) {
+      events.push(
+        `Dialogue: 0,${assTime(segment.start)},${assTime(segment.end)},Quran,,0,0,0,,{${transitionTag(arabicPosition, arabicFontSize, options.arabicVisual, segment.phase, segment.animation, segment.end - segment.start)}}${contextLine(word, index, wordsPerCaption)}`,
+      );
+    }
+    for (const segment of animationSegments(options.translationVisual, captionStart, captionEnd)) {
+      events.push(
+        `Dialogue: 1,${assTime(segment.start)},${assTime(segment.end)},Translation,,0,0,0,,{${transitionTag(translationPosition, translationFontSize, options.translationVisual, segment.phase, segment.animation, segment.end - segment.start)}}${escapeAss(word.wordTranslation)}  •  ${word.verseKey}`,
+      );
+    }
   }
   return header + events.join("\n") + "\n";
 }

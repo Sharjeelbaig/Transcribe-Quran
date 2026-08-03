@@ -11,11 +11,44 @@ export {
   DEFAULT_ARABIC_FONT_NAME,
   DEFAULT_TRANSLATION_FONT_NAME,
 } from "./captions/ass.js";
-export { refineFinalWordTimings } from "./audio/timing.js";
+export {
+  DEFAULT_SPEECH_PAUSE_SECONDS,
+  analyzeSpeech,
+  distributeAcrossSpeech,
+  measureCaptionCoverage,
+  placeInferredWordsOnSpeech,
+  refineFinalWordTimings,
+  refineSpeechWordTimings,
+  type SpeechAnalysis,
+  type SpeechSegment,
+  type SpeechTimingOptions,
+} from "./audio/timing.js";
 export {
   protectWordTimings,
   DEFAULT_FALLBACK_FRAME_RATE,
+  DEFAULT_MAXIMUM_DISPLAY_DRIFT_SECONDS,
   DEFAULT_MINIMUM_CAPTION_FRAMES,
+  DEFAULT_MINIMUM_WORD_SECONDS,
+  DEFAULT_SEGMENT_HOLD_SECONDS,
+  type TimingGuardOptions,
+  type TimingGuardResult,
 } from "./audio/timing-guard.js";
-export { transcribeAudio, DEFAULT_MODEL } from "./model/transcriber.js";
+export {
+  createModelSession,
+  spokenForm,
+  DEFAULT_MODEL,
+  MAX_SEGMENT_SECONDS,
+  type ForcedSpan,
+  type ModelSession,
+  type ModelSessionOptions,
+} from "./model/session.js";
+export { buildPhraseSegments, type PhraseSegment } from "./audio/segmenter.js";
+export { atempoFilters, stretchAudio } from "./audio/tempo.js";
+export {
+  canonicalSpanOf,
+  evenTimings,
+  materializeSpan,
+  reconcileSpan,
+  type CanonicalSpan,
+} from "./quran/passage.js";
 export type * from "./types.js";

@@ -78,8 +78,19 @@ npx transcribe-quran ./video.mp4 \
   --subtitles ./result.ass
 
 # Override FPS only if FFprobe cannot read the source video, and choose the
-# minimum number of actual video frames a caption should remain visible
-npx transcribe-quran ./video.mp4 --frame-rate 25 --min-caption-frames 3
+# minimum number of actual video frames a caption should remain visible.
+# A short breath does not end a word unless quiet audio lasts this long.
+npx transcribe-quran ./video.mp4 --frame-rate 25 --min-caption-frames 3 --speech-pause 0.60
+
+# Caption reading time: never show a word for less than half a second, let the
+# last word of a phrase linger into the silence, and cap how far a caption may
+# lag the audio in order to stay readable.
+npx transcribe-quran ./video.mp4 \
+  --min-word-seconds 0.50 --caption-hold 0.35 --max-caption-drift 0.40
+
+# Recognize each phrase at a different speed, undone before captions are timed.
+# The default of 1.0 leaves the audio alone; slowing it down measurably hurts.
+npx transcribe-quran ./video.mp4 --tempo 1.0
 ```
 
 Available verse translations are `saheehInternational`, `abdulHaleem`,
@@ -112,30 +123,94 @@ drag the edges of a timeline block for precise timing changes. Use
 `--port <number>` to choose a port and `--no-open` to keep the browser from
 opening automatically.
 
-## How matching works
+## How it works
 
-The recognizer's text is never displayed directly. It is normalized only for
-search, and exact/fuzzy anchors locate likely passages in the 77,429-word
-canonical corpus. A continuity-aware dynamic-programming alignment then maps
-the timestamps to Qur'an words. Display Arabic, word translations, and verse
-translations always come from `quran.json`.
+The recitation drives the pipeline, one phrase at a time.
 
-Whisper timestamp outliers are rejected when a single word spans an impossible
-portion of an inference window. Missing-word timing is inferred only across
-short, plausible gaps; long pauses are left uncaptioned so a previous verse
-cannot bleed into the next passage. Final ayah words are additionally checked
-against the local audio tail so elongated endings such as `ٱلضَّآلِّينَ` do not
-disappear before the reciter finishes.
+**1. Find where the reciter speaks and stops.** The audio is segmented into
+phrases by vocal energy. The noise floor is measured over roughly a minute
+either side of each point, so continuous recitation cannot mistake its own
+quietest breath for silence, and the recording level may drift without breaking
+detection. A short breath does not end a phrase; only quiet lasting longer than
+`--speech-pause` does. A phrase longer than the model's audio window is divided
+at its quietest interior moment, which lands the cut between words.
 
-The original recognizer interval is retained for every directly matched word.
-If a later audio-timing refinement would collapse that word below two source
-video frames, the original interval is restored instead. Captions use a
-separate, non-overlapping display interval of at least three source frames by
-default. This is derived from the actual video FPS, not a Qari or ayah rule;
-use `--frame-rate` only when FFprobe cannot read the file, and
-`--min-caption-frames` to choose a different display policy. The alignment JSON
-records the package version, FPS, timing fallbacks, and display extensions for
-audit.
+**2. Recognize each phrase.** Every phrase is transcribed on its own, so the
+model hears one complete thought with nothing else in the window.
+
+**3. Identify the passage.** Recognition is used only to find the place in the
+Qur'an, never to caption. Exact and fuzzy anchors locate candidate passages in
+the 77,429-word corpus, and a continuity-aware dynamic-programming alignment
+maps the recitation onto canonical positions. Identification runs over the
+whole transcript at once rather than phrase by phrase: a two-word phrase is
+ambiguous alone and unmistakable in the context of the recitation around it.
+Each phrase then takes the passage the matcher placed inside its span of time.
+Stray matches elsewhere in the Qur'an are discarded rather than allowed to
+stretch a phrase across thousands of words.
+
+**4. Replace the recognition with the canonical text.** Once a phrase's passage
+is known, every displayed word — Arabic, word translation, verse translation —
+comes from `quran.json`. The recognizer's own text is thrown away. Words it
+misheard or skipped entirely are therefore still captioned correctly, because
+the canonical text between two confident anchors is certain.
+
+**5. Measure each word against the audio.** The canonical words are fed back
+through the decoder as forced text, and each word's boundaries are read off the
+cross-attention. This is the important step: the timing of every word is
+*measured*, including words the recognizer never produced. Nothing is spread
+evenly or guessed. A word that closes a phrase is held until the voice stops,
+so an elongated ending stays on screen for as long as the reciter sustains it.
+
+When the recognizer cuts an ayah short, the remaining canonical words of that
+verse are offered to the aligner as well, and the audio decides: words that were
+recited receive real boundaries, and words that were not collapse onto an
+instant and are discarded.
+
+**6. Put the timings back on the original clock.** `--tempo` recognizes each
+phrase at a different speed, and the measured timings are converted back by the
+same factor. The default is `1.0`, meaning no change, because slowing the audio
+measurably *reduces* accuracy — Qur'anic recitation is already slower than the
+speech the model was trained on. Measured word error rate on a reference clip:
+1.0x 27.5%, 0.75x 37.5%, 0.65x 50.0%, 0.5x 97.5%. Values above 1.0 are roughly
+neutral to slightly better.
+
+If forced alignment is unavailable — a model exported without alignment heads,
+for instance — the phrase falls back to spreading its passage evenly, and the
+run reports how many phrases that affected.
+
+## Reading time
+
+A caption shown for two or three frames registers as a flicker rather than a
+word, which is why quickly recited words can look skipped. Every caption is
+kept on screen for at least half a second, and the last word of a phrase
+lingers a further 0.35 seconds into the silence that follows.
+
+Time for a short word is taken from neighbouring silence first, because that
+costs nothing. Only when there is no silence to borrow does a caption delay the
+one after it, and that delay is capped at 0.40 seconds so captions cannot drift
+away from the recitation; they re-synchronise at the next natural pause. If the
+reciter is genuinely too fast to hold a word for the full minimum without
+lagging, the caption is shortened rather than allowed to drift, and the run
+reports how many times that happened. A caption is never shown before its word
+is recited, since appearing early is more jarring than lingering late.
+
+Captions are laid out in a separate, non-overlapping display window that is
+never shorter than `--min-caption-frames` actual video frames, derived from the
+real video FPS rather than a Qari or ayah rule. Use `--frame-rate` only when
+FFprobe cannot read the file, and `--min-word-seconds`, `--caption-hold`, and
+`--max-caption-drift` to change the reading policy — or the **Speech timing**
+section of the browser editor.
+
+Every run reports what share of the recitation ended up captioned, measured on
+the finished display windows rather than assumed. The alignment JSON records
+the package version, FPS, phrase counts, how many phrases were forced-aligned,
+caption coverage, and any captions held below the minimum, for audit.
+
+In the editor, open **Layout → Transition** to choose separate Arabic or
+English enter/exit effects (Fade, Rise, Drop, or Zoom) and their durations.
+The preview and exported ASS subtitles use the same effect. Transitions never
+alter the recognized speech interval; very short display windows shorten an
+effect rather than hiding a word.
 
 Matching is deliberately confidence-gated. If the audio is not Qur'an, is too
 unclear, or is too ambiguous, the command refuses to create captions rather
@@ -144,14 +219,21 @@ located without surrounding recitation; longer context resolves them
 automatically.
 
 ```mermaid
-flowchart LR
+flowchart TB
   A["Input video"] --> B["FFmpeg: mono 16 kHz PCM"]
-  B --> C["Local Tarteel Whisper ONNX"]
-  C --> D["Timestamped Arabic words"]
-  D --> E["Canonical Qur'an matcher"]
-  Q["Bundled quran.json"] --> E
-  E --> F["Alignment JSON + ASS"]
-  F --> G["FFmpeg caption render"]
+  B --> C["Speech detection: where the reciter speaks and stops"]
+  C --> D["Phrases"]
+  D --> E["Recognize each phrase"]
+  E --> F["Identify the passage"]
+  Q["Bundled quran.json"] --> F
+  F --> G["Canonical words replace the recognition"]
+  Q --> G
+  G --> H["Force canonical text through the decoder"]
+  D --> H
+  H --> I["Measured word boundaries"]
+  I --> J["Readable, non-overlapping display windows"]
+  J --> K["Alignment JSON + ASS"]
+  K --> L["FFmpeg caption render"]
 ```
 
 ## Offline behavior

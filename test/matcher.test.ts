@@ -159,4 +159,47 @@ describe("Qur'an passage matcher", () => {
     expect(words.at(-1)?.arabic).toBe("ٱلضَّآلِّينَ");
     expect(words.at(-1)?.inferredTiming).toBe(true);
   });
+
+  it("restores a word recited too fast to leave a gap, instead of dropping it", () => {
+    // The recognizer misses the middle word and reports the two around it back
+    // to back, so there is no spare time between them to place the missing one.
+    const verse = index.words.filter((word) => word.verseKey === "1:4");
+    const matched = [verse[0]!, verse[2]!].map((word, position) => ({
+      text: word.word.text.imlaei,
+      normalized: word.normalized,
+      start: position * 0.6,
+      end: position * 0.6 + 0.6,
+      canonicalIndex: word.index,
+      matchConfidence: 0.95,
+    }));
+
+    const words = materializeAlignedWords(matched, index, "saheehInternational");
+
+    expect(words.map((word) => word.position)).toEqual([1, 2, 3]);
+    expect(words[1]?.imlaei).toBe(verse[1]?.word.text.imlaei);
+    expect(words[1]?.inferredTiming).toBe(true);
+    expect(words[1]!.end).toBeGreaterThan(words[1]!.start);
+    expect(words.every((word, position) => position === 0 || word.start >= words[position - 1]!.end - 1e-9)).toBe(true);
+  });
+
+  it("follows the reciter back to al-Fatiha at the start of a new rak'ah", () => {
+    // A passage from a later surah, then al-Fatiha again. The second passage
+    // sits far behind the first, which earlier releases discarded outright.
+    const later = transcriptFor(["21:1"]);
+    const fatiha = index.words
+      .filter((word) => ["1:2", "1:3", "1:4"].includes(word.verseKey))
+      .map((word, position) => ({
+        text: word.word.text.imlaei,
+        normalized: word.normalized,
+        start: 40 + position * 0.6,
+        end: 40 + position * 0.6 + 0.5,
+      }));
+
+    const result = matchTranscript([...later, ...fatiha], index, 0.5);
+    const words = materializeAlignedWords(result.matched, index, "saheehInternational");
+
+    expect(words.some((word) => word.verseKey === "21:1")).toBe(true);
+    expect(words.some((word) => word.verseKey === "1:2")).toBe(true);
+    expect(words.some((word) => word.verseKey === "1:4")).toBe(true);
+  });
 });

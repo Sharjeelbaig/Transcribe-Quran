@@ -57,14 +57,44 @@ describe("frame-safe timing guard", () => {
     expect(result.diagnostics.refinementFallbackWords).toBe(0);
   });
 
-  it("keeps genuinely short source words visible for the configured number of video frames", () => {
+  it("keeps genuinely short source words on screen long enough to read", () => {
     const recognizer = [word(4, 1, 1.02), word(5, 1.02, 1.04)];
     const result = protectWordTimings(recognizer, recognizer, { frameRate: 30, minimumCaptionFrames: 3 });
 
     expect(result.words[0]?.displayStart).toBe(1);
-    expect(result.words[0]?.displayEnd).toBeCloseTo(1.1, 5);
-    expect(result.words[1]?.displayStart).toBeCloseTo(1.1, 5);
-    expect(result.words[1]?.displayEnd).toBeCloseTo(1.2, 5);
+    expect(result.words[1]?.displayEnd).toBeCloseTo(1.92, 5);
     expect(result.diagnostics.displayExtendedWords).toBe(2);
+    expect(result.diagnostics.minimumDisplaySeconds).toBe(0.5);
+  });
+
+  it("never shows a caption before its word was recited", () => {
+    const recognizer = [word(4, 8, 8.05)];
+    const result = protectWordTimings(recognizer, recognizer, { frameRate: 30 });
+
+    expect(result.words[0]?.displayStart).toBe(8);
+    expect(result.words[0]!.displayEnd! - result.words[0]!.displayStart!).toBeCloseTo(0.5, 5);
+  });
+
+  it("caps how far a caption may lag the audio to stay readable", () => {
+    // Six words recited faster than the minimum display time. Captions must
+    // stay close to the recitation rather than drifting further behind it.
+    const recognizer = Array.from({ length: 6 }, (_, step) => word(4 + step, 1 + step * 0.2, 1.2 + step * 0.2));
+    const result = protectWordTimings(recognizer, recognizer, {
+      frameRate: 30,
+      maximumDisplayDriftSeconds: 0.4,
+    });
+
+    for (const [position, item] of result.words.entries()) {
+      expect(item.displayStart!).toBeLessThanOrEqual(recognizer[position]!.start + 0.4 + 1e-6);
+    }
+    expect(result.diagnostics.maximumDisplayShiftSeconds).toBeLessThanOrEqual(0.4 + 1e-6);
+    expect(result.diagnostics.belowMinimumWords).toBeGreaterThan(0);
+  });
+
+  it("lingers on the last word of a phrase, into the silence that follows", () => {
+    const ending = { ...word(4, 1, 2), endsSpeechSegment: true };
+    const result = protectWordTimings([ending], [ending], { frameRate: 30, segmentHoldSeconds: 0.35 });
+
+    expect(result.words[0]?.displayEnd).toBeCloseTo(2.35, 5);
   });
 });

@@ -9,7 +9,7 @@ import {
   DEFAULT_TRANSLATION_FONT_NAME,
   DEFAULT_TRANSLATION_FONT_SIZE,
 } from "./captions/ass.js";
-import { DEFAULT_MODEL } from "./model/transcriber.js";
+import { DEFAULT_MODEL } from "./model/session.js";
 import { startUiServer } from "./ui/server.js";
 import type { ProcessOptions, TranslationKey } from "./types.js";
 
@@ -51,6 +51,16 @@ Options:
       --frame-rate <fps>      Override source FPS when it cannot be detected
       --min-caption-frames <n>
                               Keep each caption visible for at least n frames (3)
+      --min-word-seconds <seconds>
+                              Keep each caption readable for at least this long (0.50)
+      --caption-hold <seconds>
+                              Linger after the reciter stops a phrase (0.35)
+      --max-caption-drift <seconds>
+                              How far a caption may lag the audio to stay readable (0.40)
+      --speech-pause <seconds>
+                              Quiet time that marks the end of recitation (0.60)
+      --tempo <rate>          Speed each phrase is recognized at, undone afterwards.
+                              Below 1.0 measurably hurts accuracy (1.0)
       --offline               Forbid all network model access
       --no-burn               Only create alignment JSON and ASS subtitles
       --keep-temp             Retain extracted audio and temporary files
@@ -90,6 +100,11 @@ async function main(): Promise<void> {
       confidence: { type: "string", default: "0.50" },
       "frame-rate": { type: "string" },
       "min-caption-frames": { type: "string", default: "3" },
+      "min-word-seconds": { type: "string", default: "0.50" },
+      "caption-hold": { type: "string", default: "0.35" },
+      "max-caption-drift": { type: "string", default: "0.40" },
+      "speech-pause": { type: "string", default: "0.60" },
+      tempo: { type: "string", default: "1.0" },
       offline: { type: "boolean", default: false },
       "no-burn": { type: "boolean", default: false },
       "keep-temp": { type: "boolean", default: false },
@@ -126,6 +141,11 @@ async function main(): Promise<void> {
   const captionGap = Number(parsed.values["caption-gap"]);
   const requestedFrameRate = parsed.values["frame-rate"] === undefined ? undefined : Number(parsed.values["frame-rate"]);
   const minimumCaptionFrames = Number(parsed.values["min-caption-frames"]);
+  const minimumWordSeconds = Number(parsed.values["min-word-seconds"]);
+  const captionHoldSeconds = Number(parsed.values["caption-hold"]);
+  const maximumCaptionDriftSeconds = Number(parsed.values["max-caption-drift"]);
+  const speechPauseSeconds = Number(parsed.values["speech-pause"]);
+  const tempo = Number(parsed.values.tempo);
   if (!Number.isFinite(fontSize) || fontSize <= 0) {
     throw new Error("--font-size must be a positive number.");
   }
@@ -140,6 +160,21 @@ async function main(): Promise<void> {
   }
   if (!Number.isSafeInteger(minimumCaptionFrames) || minimumCaptionFrames < 1) {
     throw new Error("--min-caption-frames must be a positive integer.");
+  }
+  if (!Number.isFinite(speechPauseSeconds) || speechPauseSeconds <= 0) {
+    throw new Error("--speech-pause must be a positive number of seconds.");
+  }
+  if (!Number.isFinite(minimumWordSeconds) || minimumWordSeconds <= 0) {
+    throw new Error("--min-word-seconds must be a positive number of seconds.");
+  }
+  if (!Number.isFinite(captionHoldSeconds) || captionHoldSeconds < 0) {
+    throw new Error("--caption-hold must be a non-negative number of seconds.");
+  }
+  if (!Number.isFinite(maximumCaptionDriftSeconds) || maximumCaptionDriftSeconds < 0) {
+    throw new Error("--max-caption-drift must be a non-negative number of seconds.");
+  }
+  if (!Number.isFinite(tempo) || tempo <= 0) {
+    throw new Error("--tempo must be a positive number.");
   }
   const port = Number(parsed.values.port);
   if (!Number.isSafeInteger(port) || port < 0 || port > 65535) {
@@ -167,6 +202,7 @@ async function main(): Promise<void> {
         arabicFontSize: fontSize,
         translationFontSize,
         captionGap,
+        speechPauseSeconds,
         confidenceThreshold,
         model: parsed.values.model,
         dtype: valueIn(parsed.values.dtype, ["fp32", "fp16", "q8", "q4"] as const, "dtype"),
@@ -200,6 +236,11 @@ async function main(): Promise<void> {
     captionGap,
     ...(requestedFrameRate !== undefined ? { frameRate: requestedFrameRate } : {}),
     minimumCaptionFrames,
+    minimumWordSeconds,
+    captionHoldSeconds,
+    maximumCaptionDriftSeconds,
+    speechPauseSeconds,
+    tempo,
     confidenceThreshold,
     burnVideo: !parsed.values["no-burn"],
     offline: parsed.values.offline,
@@ -211,16 +252,34 @@ async function main(): Promise<void> {
   console.log(`Alignment: ${result.alignmentPath}`);
   console.log(`Subtitles: ${result.subtitlePath}`);
   if (result.videoPath) console.log(`Video: ${result.videoPath}`);
-  console.log(
-    `Matched ${result.alignment.diagnostics.matchedWords}/${result.alignment.diagnostics.transcriptWords} recognized words ` +
-      `(average confidence ${(result.alignment.diagnostics.averageConfidence * 100).toFixed(1)}%).`,
-  );
   const timing = result.alignment.diagnostics;
   console.log(
-    `Frame-safe timing: ${timing.timingFrameRate?.toFixed(3) ?? "unknown"} fps, ` +
-      `${timing.minimumCaptionFrames ?? "?"} minimum frames, ` +
-      `${timing.refinementFallbackWords ?? 0} restored intervals, ${timing.displayExtendedWords ?? 0} display extensions.`,
+    `Captioned ${timing.matchedWords} canonical words from ${timing.transcriptWords} recognized ` +
+      `(average passage confidence ${(timing.averageConfidence * 100).toFixed(1)}%).`,
   );
+  console.log(
+    `Phrases: ${timing.phrases ?? 0} total — ${timing.forcedPhrases ?? 0} with forced word alignment, ` +
+      `${timing.estimatedPhrases ?? 0} estimated, ${timing.unmatchedPhrases ?? 0} unidentified` +
+      `${(timing.tempo ?? 1) !== 1 ? `, recognized at ${timing.tempo}x` : ""}.`,
+  );
+  console.log(
+    `Frame-safe timing: ${timing.timingFrameRate?.toFixed(3) ?? "unknown"} fps, ` +
+      `${timing.minimumCaptionFrames ?? "?"} minimum frames, ${timing.displayExtendedWords ?? 0} display extensions.`,
+  );
+  if (timing.voicedSeconds !== undefined) {
+    const uncovered = timing.uncoveredSpeechSeconds ?? 0;
+    console.log(
+      `Caption coverage: ${(100 - (uncovered / Math.max(timing.voicedSeconds, 1e-6)) * 100).toFixed(1)}% of ` +
+        `${timing.voicedSeconds.toFixed(1)} s of recitation is captioned ` +
+        `(${uncovered.toFixed(1)} s uncovered across ${timing.speechSegments ?? 0} phrases).`,
+    );
+  }
+  if (timing.belowMinimumWords) {
+    console.log(
+      `Note: ${timing.belowMinimumWords} caption(s) stayed under the ${timing.minimumDisplaySeconds?.toFixed(2) ?? "?"} s ` +
+        `minimum because the recitation was too fast to hold them longer without lagging the audio.`,
+    );
+  }
 }
 
 main().catch((error: unknown) => {
