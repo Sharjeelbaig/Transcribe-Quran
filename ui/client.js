@@ -16,6 +16,7 @@ const timeLabel = $("time-label");
 const transcribeButton = $("transcribe-button");
 const exportSubtitles = $("export-subtitles");
 const exportVideo = $("export-video");
+const downloadVideo = $("download-video");
 const downloadLinks = $("download-links");
 const videoInput = $("video-input");
 const projectInput = $("project-input");
@@ -403,6 +404,7 @@ function updateVideoStage() {
     transcribeButton.disabled = true;
     exportSubtitles.disabled = true;
     exportVideo.disabled = true;
+    downloadVideo.disabled = true;
     return;
   }
   dropZone.classList.add("hidden");
@@ -410,6 +412,8 @@ function updateVideoStage() {
   transcribeButton.disabled = state.job.status === "running";
   exportSubtitles.disabled = !state.hasAlignment;
   exportVideo.disabled = !state.hasAlignment;
+  // Only offered once a render exists to download.
+  downloadVideo.disabled = !state.outputs?.video;
   if (state.project.videoPath && loadedVideoKey !== state.project.videoPath) {
     loadedVideoKey = state.project.videoPath;
     video.src = `/api/video?source=${encodeURIComponent(loadedVideoKey)}&t=${Date.now()}`;
@@ -1197,6 +1201,13 @@ $("delete-overlay").addEventListener("click", () => {
 transcribeButton.addEventListener("click", transcribe);
 exportSubtitles.addEventListener("click", () => exportOutput(false));
 exportVideo.addEventListener("click", () => exportOutput(true));
+downloadVideo.addEventListener("click", () => {
+  if (!state.outputs?.video) return;
+  const link = document.createElement("a");
+  link.href = state.outputs.video;
+  link.download = "";
+  link.click();
+});
 
 $("export-menu-button").addEventListener("click", (event) => {
   event.stopPropagation();
