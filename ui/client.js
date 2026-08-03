@@ -76,6 +76,7 @@ let selectedCaptionIndex = null;
 let captionEditBefore = null;
 let timingDrag = null;
 let previewAnimationFrame = null;
+let surahNames = new Map();
 
 function icon(button, symbol) {
   if (button) button.innerHTML = `<svg><use href="#${symbol}"/></svg>`;
@@ -565,6 +566,28 @@ function endTimingDrag() {
   recordHistory(before);
 }
 
+function surahNameFor(number) {
+  if (!number) return "";
+  return surahNames.get(number) || `Surah ${number}`;
+}
+
+function currentSurahNumber(now) {
+  const words = state.alignment?.words || [];
+  if (!words.length) return null;
+  let candidate = words[0];
+  for (const word of words) {
+    if (Number(word.start) <= now) candidate = word;
+    else break;
+  }
+  return Number(candidate.verseKey.split(":")[0]) || null;
+}
+
+function overlayText(overlay, now) {
+  const text = overlay.text || "";
+  if (!overlay.autoSurah) return text || "Text overlay";
+  return text.replace(/\{surah\}/gi, surahNameFor(currentSurahNumber(now))) || "Detected chapter";
+}
+
 function renderOverlays() {
   const root = $("custom-overlays");
   root.innerHTML = "";
@@ -579,7 +602,7 @@ function renderOverlays() {
     if (overlay.id === selectedOverlayId) element.classList.add("selected");
     element.dataset.overlayId = overlay.id;
     if (overlay.type === "text") {
-      element.textContent = overlay.text || "Text overlay";
+      element.textContent = overlayText(overlay, now);
     } else if (overlay.source) {
       const image = document.createElement("img");
       image.src = overlay.source;
@@ -628,7 +651,8 @@ function renderOverlayList() {
     const row = document.createElement("button");
     row.type = "button";
     row.className = `overlay-row${overlay.id === selectedOverlayId ? " active" : ""}`;
-    row.innerHTML = `<span>${escapeHtml(overlay.type === "text" ? overlay.text || "Text overlay" : "Image overlay")}</span><span>${overlay.type}</span>`;
+    const label = overlay.type === "text" ? (overlay.autoSurah ? "Detected chapter" : overlay.text || "Text overlay") : "Image overlay";
+    row.innerHTML = `<span>${escapeHtml(label)}</span><span>${overlay.visible ? overlay.type : "hidden"}</span>`;
     row.addEventListener("click", () => {
       selectedOverlayId = overlay.id;
       selectedCaptionIndex = null;
@@ -685,6 +709,8 @@ function syncOverlayControls() {
   $("overlay-animation-out").value = visual.animationOut?.preset || "none";
   $("overlay-animation-duration").value = visual.animationIn?.duration ?? visual.animationOut?.duration ?? 250;
   $("overlay-lock").checked = Boolean(overlay.locked);
+  $("overlay-visible").checked = overlay.visible !== false;
+  $("overlay-text-wrap").querySelector("input").placeholder = overlay.autoSurah ? "e.g. Detected chapter: {surah}" : "";
 }
 
 function renderState(next) {
@@ -910,6 +936,42 @@ function addTextOverlay() {
   $("overlay-text").focus();
   $("overlay-text").select();
   setStatus("Text overlay added. Edit it in the inspector or drag it in the preview.");
+}
+
+function addSurahOverlay() {
+  const before = projectSnapshot();
+  const overlay = {
+    id: `surah-${Date.now()}`,
+    type: "text",
+    text: "Detected chapter: {surah}",
+    autoSurah: true,
+    position: { x: 0.78, y: 0.06 },
+    width: 0.4,
+    height: 0.06,
+    fontName: "Arial",
+    fontSize: 48,
+    color: "#ffffff",
+    visible: true,
+    start: 0,
+    end: Number(state.project.durationSeconds || video.duration || 0),
+    visual: { opacity: 1, outlineWidth: 3, shadowDistance: 1, animationIn: { preset: "none", duration: 250 }, animationOut: { preset: "none", duration: 250 } }
+  };
+  state.project.overlays.push(overlay);
+  selectedOverlayId = overlay.id;
+  selectedCaptionIndex = null;
+  renderOverlays();
+  recordHistory(before);
+  showTool("overlays");
+  setStatus("Detected-chapter overlay added. Drag it to place it, and keep {surah} in the text where the chapter name should appear.");
+}
+
+async function loadSurahs() {
+  try {
+    const result = await api("/api/surahs");
+    surahNames = new Map((result.surahs || []).map((surah) => [surah.number, surah.name]));
+  } catch (error) {
+    // Non-fatal: the detected-chapter overlay falls back to "Surah N" without this.
+  }
 }
 
 async function uploadImage(file) {
@@ -1247,6 +1309,7 @@ projectInput.addEventListener("change", () => loadProject(projectInput.files?.[0
 $("save-project").addEventListener("click", saveProject);
 $("add-text").addEventListener("click", addTextOverlay);
 $("add-image").addEventListener("click", () => imageInput.click());
+$("add-surah").addEventListener("click", addSurahOverlay);
 imageInput.addEventListener("change", () => uploadImage(imageInput.files?.[0]));
 $("delete-overlay").addEventListener("click", deleteSelectedOverlay);
 transcribeButton.addEventListener("click", transcribe);
@@ -1299,7 +1362,7 @@ for (const id of ["translation", "words", "arabic-font", "translation-font", "ar
   $(id).addEventListener("change", () => { syncSettingsFromControls(); updateStageGeometry(); });
 }
 
-for (const id of ["overlay-text", "overlay-font", "overlay-size", "overlay-start", "overlay-end", "overlay-opacity", "overlay-rotation", "overlay-outline", "overlay-shadow", "overlay-outline-color", "overlay-shadow-color", "overlay-outline-enabled", "overlay-shadow-enabled", "overlay-outline-opacity", "overlay-shadow-opacity", "overlay-animation-in", "overlay-animation-out", "overlay-animation-duration", "overlay-lock"]) {
+for (const id of ["overlay-text", "overlay-font", "overlay-size", "overlay-start", "overlay-end", "overlay-opacity", "overlay-rotation", "overlay-outline", "overlay-shadow", "overlay-outline-color", "overlay-shadow-color", "overlay-outline-enabled", "overlay-shadow-enabled", "overlay-outline-opacity", "overlay-shadow-opacity", "overlay-animation-in", "overlay-animation-out", "overlay-animation-duration", "overlay-lock", "overlay-visible"]) {
   $(id).addEventListener("input", () => {
     const overlay = selectedOverlay();
     if (!overlay) return;
@@ -1309,6 +1372,7 @@ for (const id of ["overlay-text", "overlay-font", "overlay-size", "overlay-start
     if (id === "overlay-start") overlay.start = Math.max(0, Number($(id).value) || 0);
     if (id === "overlay-end") overlay.end = Math.max(0.01, Number($(id).value) || 0.01);
     if (id === "overlay-lock") overlay.locked = $(id).checked;
+    if (id === "overlay-visible") overlay.visible = $(id).checked;
     const visual = visualFor(overlay);
     if (id === "overlay-opacity") visual.opacity = Number($(id).value) / 100;
     if (id === "overlay-rotation") visual.rotation = Number($(id).value) || 0;
@@ -1556,4 +1620,5 @@ icon($("theme-toggle"), localStorage.getItem("transcribe-quran-theme") === "dark
 if (localStorage.getItem("transcribe-quran-theme") === "dark") document.body.classList.add("theme-dark");
 updateHistoryButtons();
 loadFonts();
+loadSurahs();
 refresh();

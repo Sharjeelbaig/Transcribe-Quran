@@ -84,6 +84,9 @@ export interface UiOverlay {
   locked?: boolean;
   zIndex?: number;
   visual?: UiLayerVisual;
+  /** Marks a text overlay whose text is a template (e.g. "Detected chapter: {surah}")
+   * re-substituted with the recognized surah name as the recitation progresses. */
+  autoSurah?: boolean;
 }
 
 export interface UiCaptionEdit {

@@ -9,7 +9,7 @@ import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { createAss } from "../captions/ass.js";
 import { processVideo } from "../pipeline.js";
-import { buildQuranIndex, loadQuranCorpus } from "../quran/corpus.js";
+import { buildQuranIndex, loadQuranCorpus, type QuranIndex } from "../quran/corpus.js";
 import { bundledFontDirectory, renderCaptionedVideo, type ImageOverlay } from "../video/render.js";
 import type { AlignmentDocument, TranslationKey } from "../types.js";
 import {
@@ -405,7 +405,34 @@ function assVisual(visual: UiOverlay["visual"] | UiProject["layout"]["arabic"]["
   };
 }
 
-function withTextOverlays(ass: string, overlays: UiOverlay[], durationSeconds: number): string {
+function surahDisplayName(index: QuranIndex, surahNumber: number): string {
+  return index.corpus.surahs[surahNumber - 1]?.name ?? `Surah ${surahNumber}`;
+}
+
+/** Collapses consecutive words into one span per surah so the "detected surah"
+ * overlay can hold a single label across an entire chapter instead of flickering
+ * per word. */
+function detectedSurahSegments(words: AlignmentDocument["words"]): { start: number; end: number; surah: number }[] {
+  const segments: { start: number; end: number; surah: number }[] = [];
+  for (const word of words) {
+    const surah = Number(word.verseKey.split(":")[0]);
+    if (!Number.isFinite(surah)) continue;
+    const start = Number(word.start);
+    const end = Number(word.end);
+    const last = segments[segments.length - 1];
+    if (last && last.surah === surah) last.end = Math.max(last.end, end);
+    else segments.push({ start, end, surah });
+  }
+  return segments;
+}
+
+function withTextOverlays(
+  ass: string,
+  overlays: UiOverlay[],
+  durationSeconds: number,
+  words: AlignmentDocument["words"],
+  quranIndex: QuranIndex,
+): string {
   const textOverlays = overlays.filter((overlay) => overlay.visible && overlay.type === "text" && overlay.text?.trim());
   if (!textOverlays.length) return ass;
   const styleLines = textOverlays.map((overlay, index) => {
@@ -421,14 +448,25 @@ function withTextOverlays(ass: string, overlays: UiOverlay[], durationSeconds: n
   const headerIndex = ass.indexOf(marker);
   if (headerIndex < 0) throw new Error("Generated ASS subtitles are missing their events section.");
   const withStyles = `${ass.slice(0, headerIndex)}\n${styleLines.join("\n")}${ass.slice(headerIndex)}`;
-  const events = textOverlays.map((overlay, index) => {
+  const surahSegments = textOverlays.some((overlay) => overlay.autoSurah) ? detectedSurahSegments(words) : [];
+  const events = textOverlays.flatMap((overlay, index) => {
     const x = Math.round(Math.min(1, Math.max(0, overlay.position.x)) * DESIGN_WIDTH);
     const y = Math.round(Math.min(1, Math.max(0, overlay.position.y)) * DESIGN_HEIGHT);
     const timing = overlayTiming(overlay, durationSeconds);
     const fade = fadeDurations(overlay, timing.end - timing.start);
     const rotation = Number.isFinite(overlay.visual?.rotation) && overlay.visual?.rotation ? `\\frz${overlay.visual.rotation}` : "";
     const fadeTag = fade.enter || fade.exit ? `\\fad(${fade.enter},${fade.exit})` : "";
-    return `Dialogue: 2,${assTime(timing.start)},${assTime(timing.end)},Overlay${index},,0,0,0,,{\\an5\\pos(${x},${y})${rotation}${fadeTag}}${escapeAss(overlay.text ?? "")}`;
+    const tags = `{\\an5\\pos(${x},${y})${rotation}${fadeTag}}`;
+    if (!overlay.autoSurah) {
+      return [`Dialogue: 2,${assTime(timing.start)},${assTime(timing.end)},Overlay${index},,0,0,0,,${tags}${escapeAss(overlay.text ?? "")}`];
+    }
+    return surahSegments
+      .map((segment) => ({ start: Math.max(segment.start, timing.start), end: Math.min(segment.end, timing.end), surah: segment.surah }))
+      .filter((segment) => segment.end > segment.start)
+      .map((segment) => {
+        const text = (overlay.text ?? "").replace(/\{surah\}/gi, surahDisplayName(quranIndex, segment.surah));
+        return `Dialogue: 2,${assTime(segment.start)},${assTime(segment.end)},Overlay${index},,0,0,0,,${tags}${escapeAss(text)}`;
+      });
   });
   return `${withStyles.trimEnd()}\n${events.join("\n")}\n`;
 }
@@ -590,7 +628,7 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
     if (arabicVisual) Object.assign(assOptions, { arabicVisual });
     if (translationVisual) Object.assign(assOptions, { translationVisual });
     let ass = createAss(editedAlignment.words, index, settings.wordsPerCaption, assOptions);
-    ass = withTextOverlays(ass, project.overlays, editedAlignment.durationSeconds);
+    ass = withTextOverlays(ass, project.overlays, editedAlignment.durationSeconds, editedAlignment.words, index);
     await writeFile(subtitlePath, ass, "utf8");
     lastOutput = { subtitles: subtitlePath };
     if (burnVideo) {
@@ -643,6 +681,11 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
           return;
         }
         await streamVideo(project.videoPath, req, res);
+        return;
+      }
+      if (url.pathname === "/api/surahs" && req.method === "GET") {
+        const corpus = await loadQuranCorpus();
+        json(res, 200, { surahs: corpus.surahs.map((surah) => ({ number: surah.number, name: surah.name, arabicName: surah.arabicName })) });
         return;
       }
       if (url.pathname === "/api/fonts" && req.method === "GET") {
