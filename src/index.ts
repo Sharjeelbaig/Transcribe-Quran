@@ -12,5 +12,10 @@ export {
   DEFAULT_TRANSLATION_FONT_NAME,
 } from "./captions/ass.js";
 export { refineFinalWordTimings } from "./audio/timing.js";
+export {
+  protectWordTimings,
+  DEFAULT_FALLBACK_FRAME_RATE,
+  DEFAULT_MINIMUM_CAPTION_FRAMES,
+} from "./audio/timing-guard.js";
 export { transcribeAudio, DEFAULT_MODEL } from "./model/transcriber.js";
 export type * from "./types.js";

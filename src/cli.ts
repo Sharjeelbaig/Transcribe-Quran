@@ -48,6 +48,9 @@ Options:
       --translation-font <family>
                               English caption font (${DEFAULT_TRANSLATION_FONT_NAME})
       --confidence <0..1>     Minimum passage match confidence (0.50)
+      --frame-rate <fps>      Override source FPS when it cannot be detected
+      --min-caption-frames <n>
+                              Keep each caption visible for at least n frames (3)
       --offline               Forbid all network model access
       --no-burn               Only create alignment JSON and ASS subtitles
       --keep-temp             Retain extracted audio and temporary files
@@ -85,6 +88,8 @@ async function main(): Promise<void> {
       font: { type: "string", default: DEFAULT_ARABIC_FONT_NAME },
       "translation-font": { type: "string", default: DEFAULT_TRANSLATION_FONT_NAME },
       confidence: { type: "string", default: "0.50" },
+      "frame-rate": { type: "string" },
+      "min-caption-frames": { type: "string", default: "3" },
       offline: { type: "boolean", default: false },
       "no-burn": { type: "boolean", default: false },
       "keep-temp": { type: "boolean", default: false },
@@ -119,6 +124,8 @@ async function main(): Promise<void> {
   const fontSize = Number(parsed.values["font-size"]);
   const translationFontSize = Number(parsed.values["translation-font-size"]);
   const captionGap = Number(parsed.values["caption-gap"]);
+  const requestedFrameRate = parsed.values["frame-rate"] === undefined ? undefined : Number(parsed.values["frame-rate"]);
+  const minimumCaptionFrames = Number(parsed.values["min-caption-frames"]);
   if (!Number.isFinite(fontSize) || fontSize <= 0) {
     throw new Error("--font-size must be a positive number.");
   }
@@ -127,6 +134,12 @@ async function main(): Promise<void> {
   }
   if (!Number.isFinite(captionGap) || captionGap < 0) {
     throw new Error("--caption-gap must be a non-negative number.");
+  }
+  if (requestedFrameRate !== undefined && (!Number.isFinite(requestedFrameRate) || requestedFrameRate <= 0)) {
+    throw new Error("--frame-rate must be a positive number.");
+  }
+  if (!Number.isSafeInteger(minimumCaptionFrames) || minimumCaptionFrames < 1) {
+    throw new Error("--min-caption-frames must be a positive integer.");
   }
   const port = Number(parsed.values.port);
   if (!Number.isSafeInteger(port) || port < 0 || port > 65535) {
@@ -185,6 +198,8 @@ async function main(): Promise<void> {
     fontSize,
     translationFontSize,
     captionGap,
+    ...(requestedFrameRate !== undefined ? { frameRate: requestedFrameRate } : {}),
+    minimumCaptionFrames,
     confidenceThreshold,
     burnVideo: !parsed.values["no-burn"],
     offline: parsed.values.offline,
@@ -199,6 +214,12 @@ async function main(): Promise<void> {
   console.log(
     `Matched ${result.alignment.diagnostics.matchedWords}/${result.alignment.diagnostics.transcriptWords} recognized words ` +
       `(average confidence ${(result.alignment.diagnostics.averageConfidence * 100).toFixed(1)}%).`,
+  );
+  const timing = result.alignment.diagnostics;
+  console.log(
+    `Frame-safe timing: ${timing.timingFrameRate?.toFixed(3) ?? "unknown"} fps, ` +
+      `${timing.minimumCaptionFrames ?? "?"} minimum frames, ` +
+      `${timing.refinementFallbackWords ?? 0} restored intervals, ${timing.displayExtendedWords ?? 0} display extensions.`,
   );
 }
 

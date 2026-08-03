@@ -1,6 +1,6 @@
 {
   "name": "transcribe-quran",
-  "version": "1.0.17",
+  "version": "1.0.25",
   "description": "Fully local Qur'an-aware transcription and word-by-word video captions.",
   "type": "module",
   "bin": {
@@ -24,6 +24,7 @@
     "build": "tsup",
     "check": "tsc --noEmit",
     "test": "vitest run",
+    "test:baleela": "vitest run test/baleela.e2e.test.ts",
     "test:watch": "vitest",
     "prepack": "npm run check && npm test && npm run build"
   },

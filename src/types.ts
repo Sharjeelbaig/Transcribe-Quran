@@ -94,6 +94,8 @@ export interface MatchedTranscriptWord extends TranscriptWord {
   inferredTiming?: boolean;
 }
 
+export type TimingSource = "recognizer" | "refined" | "guard-fallback" | "inferred";
+
 export interface AlignedWord {
   start: number;
   end: number;
@@ -108,14 +110,23 @@ export interface AlignedWord {
   confidence: number;
   inferredTiming: boolean;
   canonicalIndex: number;
+  /** The original ASR/matcher interval, retained when later audio timing is refined. */
+  recognizerStart?: number;
+  recognizerEnd?: number;
+  /** The non-overlapping, frame-safe window used by ASS and the UI preview. */
+  displayStart?: number;
+  displayEnd?: number;
+  timingSource?: TimingSource;
 }
 
 export interface AlignmentDocument {
   schemaVersion: 1;
+  packageVersion?: string;
   sourceVideo: string;
   model: string;
   translation: TranslationKey;
   durationSeconds: number;
+  frameRate?: number;
   generatedAt: string;
   words: AlignedWord[];
   diagnostics: {
@@ -123,6 +134,11 @@ export interface AlignmentDocument {
     matchedWords: number;
     inferredWords: number;
     averageConfidence: number;
+    timingFrameRate?: number;
+    minimumCaptionFrames?: number;
+    refinementFallbackWords?: number;
+    displayExtendedWords?: number;
+    maximumDisplayShiftSeconds?: number;
   };
 }
 
@@ -145,6 +161,10 @@ export interface ProcessOptions {
   fontSize?: number;
   translationFontSize?: number;
   captionGap?: number;
+  /** Override auto-detected input FPS for frame-safe caption display. */
+  frameRate?: number;
+  /** Minimum number of video frames each caption should remain visible. */
+  minimumCaptionFrames?: number;
   confidenceThreshold: number;
   burnVideo: boolean;
   offline: boolean;

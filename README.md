@@ -76,6 +76,10 @@ npx transcribe-quran ./video.mp4 \
   --output ./result.mp4 \
   --alignment ./result.json \
   --subtitles ./result.ass
+
+# Override FPS only if FFprobe cannot read the source video, and choose the
+# minimum number of actual video frames a caption should remain visible
+npx transcribe-quran ./video.mp4 --frame-rate 25 --min-caption-frames 3
 ```
 
 Available verse translations are `saheehInternational`, `abdulHaleem`,
@@ -123,6 +127,16 @@ cannot bleed into the next passage. Final ayah words are additionally checked
 against the local audio tail so elongated endings such as `ٱلضَّآلِّينَ` do not
 disappear before the reciter finishes.
 
+The original recognizer interval is retained for every directly matched word.
+If a later audio-timing refinement would collapse that word below two source
+video frames, the original interval is restored instead. Captions use a
+separate, non-overlapping display interval of at least three source frames by
+default. This is derived from the actual video FPS, not a Qari or ayah rule;
+use `--frame-rate` only when FFprobe cannot read the file, and
+`--min-caption-frames` to choose a different display policy. The alignment JSON
+records the package version, FPS, timing fallbacks, and display extensions for
+audit.
+
 Matching is deliberately confidence-gated. If the audio is not Qur'an, is too
 unclear, or is too ambiguous, the command refuses to create captions rather
 than inventing an ayah. Identical short phrases cannot always be uniquely
@@ -158,6 +172,7 @@ The cache location is:
 ```bash
 npm run check
 npm test
+BALEELA_FIXTURE=/path/to/clip.mp4 npm run test:baleela
 npm run build
 npm pack --dry-run
 ```

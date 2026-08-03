@@ -69,6 +69,30 @@ describe("ASS caption generation", () => {
     expect(() => createAss([], index, 0)).toThrow("positive integer");
   });
 
+  it("uses the frame-safe display window while retaining the measured word timing", () => {
+    const canonical = index.words[0]!;
+    const word: AlignedWord = {
+      start: 0.5,
+      end: 0.52,
+      displayStart: 0.5,
+      displayEnd: 0.62,
+      surah: canonical.surah,
+      verse: canonical.verse,
+      verseKey: canonical.verseKey,
+      position: canonical.position,
+      arabic: canonical.word.text.uthmani,
+      imlaei: canonical.word.text.imlaei,
+      wordTranslation: canonical.word.translation,
+      verseTranslation: canonical.verseData.translations.saheehInternational,
+      confidence: 1,
+      inferredTiming: false,
+      canonicalIndex: canonical.index,
+    };
+
+    const ass = createAss([word], index, 1, { minimumDisplaySeconds: 0.1 });
+    expect(ass).toContain("Dialogue: 0,0:00:00.50,0:00:00.62,Quran");
+  });
+
   it("rejects a negative caption gap", () => {
     expect(() => createAss([], index, 1, { captionGap: -1 })).toThrow("non-negative number");
   });

@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { runProcess } from "../runtime/process.js";
 
 export const SAMPLE_RATE = 16_000;
+const execFileAsync = promisify(execFile);
 
 export async function assertFfmpeg(): Promise<void> {
   try {
@@ -30,6 +33,23 @@ export async function extractPcmAudio(input: string, output: string): Promise<vo
     "f32le",
     output,
   ]);
+}
+
+/** Returns the source video's average frames-per-second when FFprobe can read it. */
+export async function probeVideoFrameRate(input: string): Promise<number | undefined> {
+  try {
+    const result = await execFileAsync(
+      "ffprobe",
+      ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=avg_frame_rate", "-of", "default=nw=1:nk=1", input],
+      { maxBuffer: 1024 * 1024 },
+    );
+    const value = String(result.stdout).trim();
+    const [numerator = Number.NaN, denominator = 1] = value.split("/").map(Number);
+    const rate = denominator ? numerator / denominator : numerator;
+    return Number.isFinite(rate) && rate > 0 ? rate : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function readFloat32Pcm(path: string): Promise<Float32Array> {

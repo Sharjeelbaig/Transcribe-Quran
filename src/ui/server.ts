@@ -471,7 +471,7 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
       await rm(alignmentPath, { force: true });
       await rm(subtitlePath, { force: true });
       const settings = project.settings;
-      await processVideo({
+      const result = await processVideo({
         input: project.videoPath,
         alignmentOutput: alignmentPath,
         subtitleOutput: subtitlePath,
@@ -492,7 +492,15 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
         verbose: false,
       });
       await readAlignment();
-      job = { status: "complete", message: "Transcription and Qur'an matching complete." };
+      const timing = result.alignment.diagnostics;
+      const repairs = timing.refinementFallbackWords ?? 0;
+      const extensions = timing.displayExtendedWords ?? 0;
+      job = {
+        status: "complete",
+        message: repairs || extensions
+          ? `Transcription complete. Frame-safe timing restored ${repairs} interval(s) and extended ${extensions} display window(s).`
+          : "Transcription and Qur'an matching complete.",
+      };
     } catch (error) {
       job = { status: "error", message: error instanceof Error ? error.message : String(error) };
     }

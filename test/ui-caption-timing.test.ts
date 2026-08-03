@@ -20,4 +20,9 @@ describe("caption preview timing", () => {
     expect(findActiveCaptionIndex(words, 6.65)).toBe(1);
     expect(findActiveCaptionIndex(words, 6.5)).toBe(-1);
   });
+
+  it("uses a frame-safe display interval when measured timing was shorter", () => {
+    const repaired = [{ start: 2.5, end: 2.52, displayStart: 2.48, displayEnd: 3.06 }];
+    expect(findActiveCaptionIndex(repaired, 2.8)).toBe(0);
+  });
 });

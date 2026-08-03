@@ -1,7 +1,8 @@
-import { access, copyFile, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, parse, resolve } from "node:path";
-import { assertFfmpeg, durationSeconds, extractPcmAudio, readFloat32Pcm } from "./audio/audio.js";
+import { assertFfmpeg, durationSeconds, extractPcmAudio, probeVideoFrameRate, readFloat32Pcm } from "./audio/audio.js";
+import { protectWordTimings } from "./audio/timing-guard.js";
 import { refineFinalWordTimings } from "./audio/timing.js";
 import { createAss } from "./captions/ass.js";
 import { transcribeAudio } from "./model/transcriber.js";
@@ -39,10 +40,21 @@ async function ensureInput(path: string): Promise<void> {
   }
 }
 
+async function installedPackageVersion(): Promise<string | undefined> {
+  try {
+    const metadata = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { version?: unknown };
+    return typeof metadata.version === "string" ? metadata.version : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function processVideo(options: ProcessOptions): Promise<ProcessResult> {
   const input = resolve(options.input);
   await ensureInput(input);
   await assertFfmpeg();
+  const packageVersion = await installedPackageVersion();
+  const detectedFrameRate = options.frameRate ?? await probeVideoFrameRate(input);
   const paths = outputPaths({ ...options, input });
   if (options.burnVideo && paths.video === input) {
     throw new Error("Output video must not overwrite the input video.");
@@ -77,11 +89,17 @@ export async function processVideo(options: ProcessOptions): Promise<ProcessResu
       console.error(`Matcher window scores: ${match.windowScores.map((score) => score.toFixed(3)).join(", ")}`);
       console.error(`Unmatched windows: ${match.unmatchedWindows}`);
     }
-    const words = refineFinalWordTimings(
-      materializeAlignedWords(match.matched, index, options.translation),
+    const recognizerWords = materializeAlignedWords(match.matched, index, options.translation);
+    const refinedWords = refineFinalWordTimings(
+      recognizerWords,
       index,
       audio,
     );
+    const timing = protectWordTimings(recognizerWords, refinedWords, {
+      ...(detectedFrameRate !== undefined ? { frameRate: detectedFrameRate } : {}),
+      ...(options.minimumCaptionFrames !== undefined ? { minimumCaptionFrames: options.minimumCaptionFrames } : {}),
+    });
+    const words = timing.words;
     if (!words.length) {
       throw new Error(
         "No Qur'anic passage passed the confidence threshold. The program refused to create potentially incorrect captions.",
@@ -90,10 +108,12 @@ export async function processVideo(options: ProcessOptions): Promise<ProcessResu
     const averageConfidence = words.reduce((sum, word) => sum + word.confidence, 0) / words.length;
     const alignment: AlignmentDocument = {
       schemaVersion: 1,
+      ...(packageVersion ? { packageVersion } : {}),
       sourceVideo: input,
       model: options.model,
       translation: options.translation,
       durationSeconds: duration,
+      frameRate: timing.diagnostics.frameRate,
       generatedAt: new Date().toISOString(),
       words,
       diagnostics: {
@@ -101,6 +121,11 @@ export async function processVideo(options: ProcessOptions): Promise<ProcessResu
         matchedWords: match.matched.length,
         inferredWords: words.filter((word) => word.inferredTiming).length,
         averageConfidence,
+        timingFrameRate: timing.diagnostics.frameRate,
+        minimumCaptionFrames: timing.diagnostics.minimumCaptionFrames,
+        refinementFallbackWords: timing.diagnostics.refinementFallbackWords,
+        displayExtendedWords: timing.diagnostics.displayExtendedWords,
+        maximumDisplayShiftSeconds: timing.diagnostics.maximumDisplayShiftSeconds,
       },
     };
     await writeFile(paths.alignment, `${JSON.stringify(alignment, null, 2)}\n`, "utf8");
@@ -118,6 +143,7 @@ export async function processVideo(options: ProcessOptions): Promise<ProcessResu
           ? { translationFontSize: options.translationFontSize }
           : {}),
         ...(options.captionGap !== undefined ? { captionGap: options.captionGap } : {}),
+        minimumDisplaySeconds: timing.diagnostics.minimumDisplaySeconds,
       }),
       "utf8",
     );

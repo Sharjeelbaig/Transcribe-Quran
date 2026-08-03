@@ -37,6 +37,7 @@ export interface AssOptions {
   arabicFontSize?: number;
   translationFontSize?: number;
   captionGap?: number;
+  minimumDisplaySeconds?: number;
   arabicPosition?: AssPosition;
   translationPosition?: AssPosition;
   arabicVisual?: AssLayerVisual;
@@ -175,6 +176,10 @@ export function createAss(
   if (!Number.isFinite(captionGap) || captionGap < 0) {
     throw new Error("captionGap must be a non-negative number.");
   }
+  const minimumDisplaySeconds = options.minimumDisplaySeconds ?? 0.08;
+  if (!Number.isFinite(minimumDisplaySeconds) || minimumDisplaySeconds <= 0) {
+    throw new Error("minimumDisplaySeconds must be a positive number.");
+  }
   const arabicFontName = validFontName(
     options.arabicFontName ?? DEFAULT_ARABIC_FONT_NAME,
     "arabicFontName",
@@ -216,13 +221,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
   const events: string[] = [];
   for (const word of words) {
-    const start = assTime(word.start);
-    const end = assTime(Math.max(word.end, word.start + 0.08));
+    const captionStart = word.displayStart ?? word.start;
+    const measuredEnd = word.displayEnd ?? word.end;
+    const captionEnd = Math.max(measuredEnd, captionStart + minimumDisplaySeconds);
+    const start = assTime(captionStart);
+    const end = assTime(captionEnd);
     events.push(
-      `Dialogue: 0,${start},${end},Quran,,0,0,0,,{\\an5\\pos(${arabicPosition.x},${arabicPosition.y})${animationTag(options.arabicVisual, word.start, word.end)}}${contextLine(word, index, wordsPerCaption)}`,
+      `Dialogue: 0,${start},${end},Quran,,0,0,0,,{\\an5\\pos(${arabicPosition.x},${arabicPosition.y})${animationTag(options.arabicVisual, captionStart, captionEnd)}}${contextLine(word, index, wordsPerCaption)}`,
     );
     events.push(
-      `Dialogue: 1,${start},${end},Translation,,0,0,0,,{\\an5\\pos(${translationPosition.x},${translationPosition.y})${animationTag(options.translationVisual, word.start, word.end)}}${escapeAss(word.wordTranslation)}  •  ${word.verseKey}`,
+      `Dialogue: 1,${start},${end},Translation,,0,0,0,,{\\an5\\pos(${translationPosition.x},${translationPosition.y})${animationTag(options.translationVisual, captionStart, captionEnd)}}${escapeAss(word.wordTranslation)}  •  ${word.verseKey}`,
     );
   }
   return header + events.join("\n") + "\n";

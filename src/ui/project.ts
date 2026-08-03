@@ -130,6 +130,8 @@ export function applyCaptionEdits(alignment: AlignmentDocument, edits: UiCaption
       ...(edit.wordTranslation !== undefined ? { wordTranslation: edit.wordTranslation } : {}),
       start,
       end: Math.min(alignment.durationSeconds, end),
+      displayStart: start,
+      displayEnd: Math.min(alignment.durationSeconds, end),
     }];
   });
   return {

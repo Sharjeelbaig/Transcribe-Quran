@@ -51,7 +51,7 @@ describe("caption edit application", () => {
       [key]: { arabic: "بِسْمِ اللَّهِ", wordTranslation: "In Allah's name", start: 0.25, end: 1.5 },
     });
 
-    expect(edited.words[0]).toMatchObject({ arabic: "بِسْمِ اللَّهِ", wordTranslation: "In Allah's name", start: 0.25, end: 1.5 });
+    expect(edited.words[0]).toMatchObject({ arabic: "بِسْمِ اللَّهِ", wordTranslation: "In Allah's name", start: 0.25, end: 1.5, displayStart: 0.25, displayEnd: 1.5 });
     expect(alignment.words[0]!.arabic).toBe("بِسْمِ");
   });
 

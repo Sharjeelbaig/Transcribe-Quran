@@ -166,12 +166,16 @@ function effectiveWord(index) {
   if (!word) return undefined;
   const edit = captionEditFor(index);
   if (edit?.hidden) return undefined;
+  const start = edit?.start !== undefined ? edit.start : word.start;
+  const end = edit?.end !== undefined ? edit.end : word.end;
+  const timingEdited = edit?.start !== undefined || edit?.end !== undefined;
   return {
     ...word,
     ...(edit?.arabic !== undefined ? { arabic: edit.arabic } : {}),
     ...(edit?.wordTranslation !== undefined ? { wordTranslation: edit.wordTranslation } : {}),
-    ...(edit?.start !== undefined ? { start: edit.start } : {}),
-    ...(edit?.end !== undefined ? { end: edit.end } : {}),
+    start,
+    end,
+    ...(timingEdited ? { displayStart: start, displayEnd: end } : {}),
   };
 }
 
@@ -391,7 +395,9 @@ function updatePlayer() {
   document.querySelectorAll(".timeline-word").forEach((element) => {
     const index = Number(element.dataset.index);
     const word = effectiveWord(index);
-    element.classList.toggle("active", Boolean(word && video.currentTime >= word.start && video.currentTime <= word.end));
+    const displayStart = word?.displayStart ?? word?.start;
+    const displayEnd = word?.displayEnd ?? word?.end;
+    element.classList.toggle("active", Boolean(word && video.currentTime >= displayStart && video.currentTime <= displayEnd));
     element.classList.toggle("selected", selectedCaptionIndex === index);
   });
   renderCaption();
@@ -415,13 +421,15 @@ function renderTimeline() {
   timelineSummary.textContent = `${words.length} matched words · ${ayahs.size} ayahs`;
   entries.forEach((entry) => {
     const word = entry.word;
+    const displayStart = Number(word.displayStart ?? word.start);
+    const displayEnd = Number(word.displayEnd ?? word.end);
     const event = document.createElement("button");
     event.className = "timeline-word";
     event.type = "button";
     event.dataset.index = String(entry.index);
     event.title = `${word.verseKey} · ${word.arabic}`;
-    event.style.left = `${Math.max(0, word.start / duration) * 100}%`;
-    event.style.width = `${Math.max(.25, (word.end - word.start) / duration * 100)}%`;
+    event.style.left = `${Math.max(0, displayStart / duration) * 100}%`;
+    event.style.width = `${Math.max(.25, (displayEnd - displayStart) / duration * 100)}%`;
     event.innerHTML = '<span class="timeline-handle timeline-handle-start" aria-hidden="true"></span><span class="timeline-handle timeline-handle-end" aria-hidden="true"></span>';
     event.querySelector(".timeline-handle-start").addEventListener("pointerdown", (pointerEvent) => beginTimingDrag(pointerEvent, entry.index, "start"));
     event.querySelector(".timeline-handle-end").addEventListener("pointerdown", (pointerEvent) => beginTimingDrag(pointerEvent, entry.index, "end"));
