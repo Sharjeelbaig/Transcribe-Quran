@@ -188,6 +188,12 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 .caption-editor-meta { margin-top: -8px; color: var(--faint); font-size: 10px; }
 .subsection-heading { justify-content: space-between; font-size: 11px; }
 .text-button { padding: 0; border: 0; background: transparent; color: var(--danger); font-size: 10px; }
+.shortcuts-dialog { width: min(520px, calc(100vw - 32px)); max-height: min(720px, calc(100vh - 32px)); padding: 20px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.shortcuts-dialog::backdrop { background: rgba(12, 16, 22, .42); }
+.shortcuts-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
+.shortcuts-heading h2 { margin: 0; font-size: 18px; letter-spacing: -.02em; }
+.shortcuts-grid { display: grid; grid-template-columns: minmax(150px, auto) 1fr; align-items: center; gap: 10px 16px; color: var(--muted); font-size: 12px; line-height: 1.35; }
+kbd { display: inline-block; width: fit-content; padding: 4px 7px; border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 4px; background: var(--surface-soft); color: var(--text); font-family: inherit; font-size: 10px; font-weight: 650; white-space: nowrap; }
 .project-actions { display: grid; gap: 8px; margin-top: 25px; padding-top: 18px; border-top: 1px solid var(--border); }
 .download-links { display: grid; gap: 6px; }
 .download-links a { color: var(--accent); font-size: 11px; }

@@ -41,6 +41,7 @@
         <button id="undo-button" class="icon-button quiet" data-tooltip="Undo" aria-label="Undo" disabled><svg><use href="#i-undo"/></svg></button>
         <button id="redo-button" class="icon-button quiet" data-tooltip="Redo" aria-label="Redo" disabled><svg><use href="#i-redo"/></svg></button>
         <span class="header-divider"></span>
+        <button id="shortcuts-button" class="icon-button quiet" data-tooltip="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><span class="help-mark">?</span></button>
         <button id="theme-toggle" class="icon-button quiet" data-tooltip="Toggle theme" aria-label="Toggle theme"><svg><use href="#i-sun"/></svg></button>
         <button id="choose-button" class="button outline"><svg><use href="#i-upload"/></svg><span>Open video</span></button>
         <button id="save-project" class="button outline"><svg><use href="#i-save"/></svg><span>Save project</span></button>
@@ -147,7 +148,7 @@
             <label>Translation<textarea id="caption-translation" rows="2"></textarea></label>
             <div class="field-grid"><label>Start (seconds)<input id="caption-start" type="number" min="0" step="0.01" /></label><label>End (seconds)<input id="caption-end" type="number" min="0" step="0.01" /></label></div>
             <div class="button-row"><button id="caption-shift-back" class="button outline">− 50 ms</button><button id="caption-shift-forward" class="button outline">+ 50 ms</button></div>
-            <div class="button-row"><button id="caption-hide" class="button outline">Hide caption</button><button id="caption-reset" class="button outline" disabled>Reset automatic</button></div>
+            <div class="button-row"><button id="caption-hide" class="button outline">Delete caption</button><button id="caption-reset" class="button outline" disabled>Reset automatic</button></div>
           </section>
         </section>
 
@@ -187,6 +188,31 @@
     </div>
 
     <div id="toast" class="toast hidden"></div>
+    <dialog id="shortcuts-dialog" class="shortcuts-dialog" aria-labelledby="shortcuts-title">
+      <div class="shortcuts-heading"><div><span class="section-kicker">EDITOR</span><h2 id="shortcuts-title">Keyboard shortcuts</h2></div><button id="shortcuts-close" class="icon-button quiet" data-tooltip="Close" aria-label="Close shortcuts">×</button></div>
+      <div class="shortcuts-grid">
+        <kbd>Space / K</kbd><span>Play or pause</span>
+        <kbd>J / L</kbd><span>Seek 5 seconds backward / forward</span>
+        <kbd>Home / End</kbd><span>Go to the start / end</span>
+        <kbd>[ / ]</kbd><span>Select previous / next caption</span>
+        <kbd>Delete / Backspace</kbd><span>Delete the selected overlay or caption</span>
+        <kbd>Arrow keys</kbd><span>Move the selected layer; hold Shift for 10× movement</span>
+        <kbd>T / I</kbd><span>Add a text / image overlay</span>
+        <kbd>R</kbd><span>Reset caption layout</span>
+        <kbd>+ / −</kbd><span>Zoom the caption timeline</span>
+        <kbd>⌘/Ctrl + Z</kbd><span>Undo</span>
+        <kbd>⌘/Ctrl + Shift + Z or Y</kbd><span>Redo</span>
+        <kbd>⌘/Ctrl + S</kbd><span>Save project</span>
+        <kbd>⌘/Ctrl + O</kbd><span>Open video</span>
+        <kbd>⌘/Ctrl + Shift + O</kbd><span>Load project file</span>
+        <kbd>⌘/Ctrl + Enter</kbd><span>Start transcription</span>
+        <kbd>⌘/Ctrl + E</kbd><span>Export subtitles</span>
+        <kbd>⌘/Ctrl + Shift + E</kbd><span>Render video</span>
+        <kbd>1–4</kbd><span>Switch to Captions, Layout, Overlays, or Engine</span>
+        <kbd>?</kbd><span>Open this shortcut list</span>
+        <kbd>Esc</kbd><span>Close editor, deselect, or close a menu</span>
+      </div>
+    </dialog>
     <script type="module" src="/client.js"></script>
   </body>
 </html>

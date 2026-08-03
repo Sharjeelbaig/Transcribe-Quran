@@ -119,9 +119,81 @@ installed/bundled fonts, import local `.ttf`, `.otf`, `.woff`, or `.woff2`
 fonts, save a project file, add text/image overlays, and export ASS subtitles
 or a rendered MP4. Click any word on the caption timeline to manually edit its
 Arabic text, translation, timing, visibility, or restore the automatic match;
-drag the edges of a timeline block for precise timing changes. Use
+drag the edges of a timeline block for precise timing changes. Select an
+overlay or caption and press Delete/Backspace to remove it. Overlay deletion
+removes the overlay from the project; caption deletion creates a reversible
+hidden-caption edit so the canonical alignment remains intact. Use
 `--port <number>` to choose a port and `--no-open` to keep the browser from
 opening automatically.
+
+### Keyboard shortcuts
+
+Shortcuts use `⌘` on macOS and `Ctrl` on Windows/Linux. They work when the
+editor is focused; text, number, select, and textarea fields keep their normal
+editing behavior. Press `?` or the `?` button in the header to open the same
+reference inside the editor.
+
+| Shortcut | Action |
+| --- | --- |
+| `Space` or `K` | Play/pause the video |
+| `J` / `L` | Seek 5 seconds backward/forward |
+| `Home` / `End` | Go to the start/end of the video |
+| `[` / `]` | Select the previous/next visible caption |
+| `Delete` / `Backspace` | Delete the selected overlay or caption |
+| Arrow keys | Move the selected overlay or caption layer by 1 design pixel |
+| `Shift` + Arrow keys | Move by 10 design pixels |
+| `T` / `I` | Add a text/image overlay |
+| `R` | Reset caption layout |
+| `+` / `−` | Zoom the caption timeline in/out |
+| `⌘/Ctrl` + `Z` | Undo |
+| `⌘/Ctrl` + `Shift` + `Z` or `⌘/Ctrl` + `Y` | Redo |
+| `⌘/Ctrl` + `S` | Save the project file |
+| `⌘/Ctrl` + `O` | Open a video |
+| `⌘/Ctrl` + `Shift` + `O` | Load a project file |
+| `⌘/Ctrl` + `Enter` | Start local transcription |
+| `⌘/Ctrl` + `E` | Export ASS subtitles |
+| `⌘/Ctrl` + `Shift` + `E` | Render the captioned MP4 |
+| `1`–`4` | Switch to Captions, Layout, Overlays, or Engine |
+| `Esc` | Close the caption editor, deselect an overlay, or close a menu |
+| `?` | Show the keyboard shortcut reference |
+
+### Current application pipeline
+
+The repository has two entry paths that share the same transcription engine:
+
+1. **CLI path.** `src/cli.ts` parses the command and options. The CLI calls
+   `src/pipeline.ts`, which extracts mono 16 kHz PCM with FFmpeg, detects
+   speech phrases, transcribes each phrase with the local Whisper ONNX model,
+   matches the complete transcript against the bundled `quran.json`, measures
+   canonical word timings, protects caption reading time, writes alignment JSON
+   and ASS subtitles, and optionally burns the ASS file into a new video with
+   FFmpeg.
+2. **Browser editor startup.** `--ui` starts `src/ui/server.ts` on localhost
+   and creates a temporary session workspace. The server copies bundled fonts,
+   accepts an optional video upload, serves the video to `ui/client.js`, and
+   keeps the current project, alignment, overlays, and export outputs in that
+   session.
+3. **Transcription request.** The browser sends the current engine settings
+   to `/api/transcribe`. The server invokes the same `processVideo` pipeline
+   with video burning disabled, writes the temporary alignment/subtitle files,
+   and reports progress through `/api/state`; the browser polls that state and
+   renders the resulting canonical words on the video timeline.
+4. **Editing.** `ui/client.js` stores layout changes, caption overrides,
+   hidden captions, text/image overlays, fonts, and timing adjustments in the
+   project object, which can be downloaded as a `.tqproject.json` file. On
+   transcription and export, the current browser project is sent to
+   `/api/project` or `/api/export` for server-side validation. Caption text
+   remains canonical by default; manual caption edits are keyed to stable
+   alignment word IDs.
+5. **Export request.** The browser sends the edited project to `/api/export`.
+   The server applies caption edits, removes hidden captions, generates ASS
+   subtitles using the current layout and text overlays, and—when video
+   rendering is requested—passes image overlays to FFmpeg. The resulting ASS
+   and MP4 files are exposed as downloads for the current session.
+
+In short: the recognition model is used to locate and time Qur'anic words;
+the corpus supplies the displayed text; the browser project supplies edits and
+visual composition; and export applies those two layers to ASS/FFmpeg output.
 
 ## How it works
 

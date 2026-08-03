@@ -28,6 +28,7 @@ const captionTrack = $("caption-track");
 const timelineSummary = $("timeline-summary");
 const toast = $("toast");
 const captionEditor = $("caption-editor");
+const shortcutsDialog = $("shortcuts-dialog");
 
 let state = {
   project: {
@@ -251,7 +252,8 @@ function updateCaptionEditor() {
   $("caption-translation").value = entry.word.wordTranslation || "";
   $("caption-start").value = Number(entry.word.start).toFixed(2);
   $("caption-end").value = Number(entry.word.end).toFixed(2);
-  $("caption-hide").textContent = edit?.hidden ? "Restore caption" : "Hide caption";
+  $("caption-hide").textContent = edit?.hidden ? "Restore caption" : "Delete caption";
+  $("caption-hide").setAttribute("aria-label", edit?.hidden ? "Restore caption" : "Delete caption");
   $("caption-reset").disabled = !edit;
 }
 
@@ -287,6 +289,7 @@ function commitCaptionEdit(before = captionEditBefore) {
 
 function selectCaption(index, seek = true) {
   commitCaptionEdit();
+  selectedOverlayId = null;
   selectedCaptionIndex = index;
   const entry = selectedCaptionEntry();
   if (seek && entry && Number.isFinite(entry.word.start)) {
@@ -294,6 +297,7 @@ function selectCaption(index, seek = true) {
     updatePlayer();
   }
   updateCaptionEditor();
+  renderOverlays();
   renderTimeline();
   showTool("captions");
 }
@@ -597,7 +601,10 @@ function renderOverlays() {
     if (overlay.color) element.style.color = overlay.color;
     element.addEventListener("pointerdown", (event) => {
       selectedOverlayId = overlay.id;
+      selectedCaptionIndex = null;
       syncOverlayControls();
+      updateCaptionEditor();
+      renderTimeline();
       renderOverlays();
       beginOverlayDrag(event, overlay, element);
     });
@@ -624,6 +631,9 @@ function renderOverlayList() {
     row.innerHTML = `<span>${escapeHtml(overlay.type === "text" ? overlay.text || "Text overlay" : "Image overlay")}</span><span>${overlay.type}</span>`;
     row.addEventListener("click", () => {
       selectedOverlayId = overlay.id;
+      selectedCaptionIndex = null;
+      updateCaptionEditor();
+      renderTimeline();
       renderOverlays();
     });
     list.appendChild(row);
@@ -634,9 +644,21 @@ function selectedOverlay() {
   return (state.project.overlays || []).find((overlay) => overlay.id === selectedOverlayId);
 }
 
+function deleteSelectedOverlay() {
+  if (!selectedOverlay()) return false;
+  const before = projectSnapshot();
+  state.project.overlays = state.project.overlays.filter((overlay) => overlay.id !== selectedOverlayId);
+  selectedOverlayId = null;
+  renderOverlays();
+  recordHistory(before);
+  setStatus("Overlay deleted. Use Undo to restore it.");
+  return true;
+}
+
 function syncOverlayControls() {
   const overlay = selectedOverlay();
   $("overlay-editor").classList.toggle("hidden", !overlay);
+  $("delete-overlay").disabled = !overlay;
   if (!overlay) return;
   $("overlay-text-wrap").classList.toggle("hidden", overlay.type !== "text");
   $("overlay-font").closest("label").classList.toggle("hidden", overlay.type !== "text");
@@ -755,6 +777,19 @@ async function exportOutput(burnVideo) {
 function beginLayerDrag(event, layerName, element) {
   if (event.target.closest(".resize-handle")) return;
   event.preventDefault();
+  if (selectedOverlayId) {
+    selectedOverlayId = null;
+    renderOverlays();
+  }
+  const current = activeCaption?.current;
+  const activeIndex = current
+    ? state.alignment?.words?.findIndex((word) => word.verseKey === current.verseKey && word.canonicalIndex === current.canonicalIndex)
+    : -1;
+  if (activeIndex !== undefined && activeIndex >= 0) {
+    selectedCaptionIndex = activeIndex;
+    updateCaptionEditor();
+    renderTimeline();
+  }
   selectedLayer = layerName;
   updateLayerSelection();
   const rect = overlayStage.getBoundingClientRect();
@@ -868,6 +903,7 @@ function addTextOverlay() {
   };
   state.project.overlays.push(overlay);
   selectedOverlayId = overlay.id;
+  selectedCaptionIndex = null;
   renderOverlays();
   recordHistory(before);
   showTool("overlays");
@@ -900,6 +936,7 @@ async function uploadImage(file) {
     };
     state.project.overlays.push(overlay);
     selectedOverlayId = overlay.id;
+    selectedCaptionIndex = null;
     renderOverlays();
     recordHistory(before);
     setStatus("Image overlay added. Drag it in the preview and export when ready.");
@@ -1040,6 +1077,14 @@ function toggleTheme() {
   icon($("theme-toggle"), dark ? "i-moon" : "i-sun");
 }
 
+function openShortcuts() {
+  if (shortcutsDialog?.showModal) shortcutsDialog.showModal();
+}
+
+function closeShortcuts() {
+  if (shortcutsDialog?.open) shortcutsDialog.close();
+}
+
 function startCaptionEditHistory() {
   if (captionEditBefore === null) captionEditBefore = projectSnapshot();
 }
@@ -1081,6 +1126,22 @@ function toggleCaptionHidden() {
   previewCaptionEdit();
   updateCaptionEditor();
   recordHistory(before);
+}
+
+function deleteSelectedCaption() {
+  const entry = selectedCaptionEntry();
+  if (!entry || captionEditFor(entry.index)?.hidden) return false;
+  const before = projectSnapshot();
+  if (!state.project.captionEdits) state.project.captionEdits = {};
+  state.project.captionEdits[entry.id] = {
+    ...(state.project.captionEdits[entry.id] || {}),
+    hidden: true,
+  };
+  previewCaptionEdit();
+  updateCaptionEditor();
+  recordHistory(before);
+  setStatus("Caption deleted. Use Restore caption or Undo to bring it back.");
+  return true;
 }
 
 function resetCaptionEdit() {
@@ -1162,10 +1223,7 @@ for (const id of ["layer-opacity", "layer-rotation", "layer-outline", "layer-sha
   });
 }
 $("timeline-zoom").addEventListener("click", () => {
-  timelineZoom = timelineZoom === 1 ? 2 : timelineZoom === 2 ? 4 : 1;
-  $("timeline-zoom").setAttribute("aria-label", `Timeline zoom ${timelineZoom}x`);
-  $("timeline-zoom").dataset.tooltip = `Timeline zoom ${timelineZoom}x`;
-  renderTimeline();
+  changeTimelineZoom(0);
 });
 $("caption-close").addEventListener("click", closeCaptionEditor);
 $("caption-shift-back").addEventListener("click", () => nudgeCaption(-0.05));
@@ -1190,14 +1248,7 @@ $("save-project").addEventListener("click", saveProject);
 $("add-text").addEventListener("click", addTextOverlay);
 $("add-image").addEventListener("click", () => imageInput.click());
 imageInput.addEventListener("change", () => uploadImage(imageInput.files?.[0]));
-$("delete-overlay").addEventListener("click", () => {
-  if (!selectedOverlayId) return;
-  const before = projectSnapshot();
-  state.project.overlays = state.project.overlays.filter((overlay) => overlay.id !== selectedOverlayId);
-  selectedOverlayId = null;
-  renderOverlays();
-  recordHistory(before);
-});
+$("delete-overlay").addEventListener("click", deleteSelectedOverlay);
 transcribeButton.addEventListener("click", transcribe);
 exportSubtitles.addEventListener("click", () => exportOutput(false));
 exportVideo.addEventListener("click", () => exportOutput(true));
@@ -1237,6 +1288,11 @@ document.querySelectorAll("[data-tool]").forEach((button) => button.addEventList
 $("undo-button").addEventListener("click", undo);
 $("redo-button").addEventListener("click", redo);
 $("theme-toggle").addEventListener("click", toggleTheme);
+$("shortcuts-button").addEventListener("click", openShortcuts);
+$("shortcuts-close").addEventListener("click", closeShortcuts);
+shortcutsDialog?.addEventListener("click", (event) => {
+  if (event.target === shortcutsDialog) closeShortcuts();
+});
 
 for (const id of ["translation", "words", "arabic-font", "translation-font", "arabic-size", "translation-size", "caption-gap", "speech-pause", "offline", "model", "dtype", "confidence"]) {
   $(id).addEventListener("input", () => { syncSettingsFromControls(); updateStageGeometry(); });
@@ -1287,28 +1343,210 @@ document.body.addEventListener("drop", (event) => {
   if (file) uploadVideo(file);
 });
 
+function isTypingTarget(target) {
+  const tag = target?.tagName?.toLowerCase();
+  return tag === "input" || tag === "select" || tag === "textarea" || target?.isContentEditable;
+}
+
+function togglePlayback() {
+  if (!state.hasVideo) return;
+  if (video.paused) void video.play(); else video.pause();
+}
+
+function seekBy(delta) {
+  if (!Number.isFinite(video.duration)) return;
+  video.currentTime = Math.max(0, Math.min(video.duration, (video.currentTime || 0) + delta));
+  updatePlayer();
+}
+
+function selectAdjacentCaption(direction) {
+  const entries = captionEntries();
+  if (!entries.length) return;
+  const current = entries.findIndex((entry) => entry.index === selectedCaptionIndex);
+  const next = current < 0
+    ? (direction > 0 ? entries[0] : entries.at(-1))
+    : entries[Math.max(0, Math.min(entries.length - 1, current + direction))];
+  if (next) selectCaption(next.index);
+}
+
+function changeTimelineZoom(direction) {
+  const levels = [1, 2, 4];
+  const current = Math.max(0, levels.indexOf(timelineZoom));
+  const next = direction === 0 ? (current + 1) % levels.length : Math.max(0, Math.min(levels.length - 1, current + direction));
+  timelineZoom = levels[next];
+  $("timeline-zoom").setAttribute("aria-label", `Timeline zoom ${timelineZoom}x`);
+  $("timeline-zoom").dataset.tooltip = `Timeline zoom ${timelineZoom}x`;
+  renderTimeline();
+}
+
+function nudgeSelection(key, step) {
+  const before = projectSnapshot();
+  const overlay = selectedOverlay();
+  if (overlay) {
+    if (overlay.locked) return;
+    if (key === "ArrowUp") overlay.position.y = Math.max(0, overlay.position.y - step / DESIGN_HEIGHT);
+    if (key === "ArrowDown") overlay.position.y = Math.min(1, overlay.position.y + step / DESIGN_HEIGHT);
+    if (key === "ArrowLeft") overlay.position.x = Math.max(0, overlay.position.x - step / DESIGN_WIDTH);
+    if (key === "ArrowRight") overlay.position.x = Math.min(1, overlay.position.x + step / DESIGN_WIDTH);
+    syncOverlayControls();
+  } else {
+    const layer = currentLayer();
+    if (key === "ArrowUp") layer.position.y -= step;
+    if (key === "ArrowDown") layer.position.y += step;
+    if (key === "ArrowLeft") layer.position.x -= step;
+    if (key === "ArrowRight") layer.position.x += step;
+    layer.position.x = Math.max(0, Math.min(DESIGN_WIDTH, layer.position.x));
+    layer.position.y = Math.max(0, Math.min(DESIGN_HEIGHT, layer.position.y));
+    updateLayerSelection();
+  }
+  updateStageGeometry();
+  recordHistory(before);
+}
+
 document.addEventListener("keydown", (event) => {
-  const tag = event.target?.tagName?.toLowerCase();
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
+  const key = event.key;
+  const lowerKey = key.toLowerCase();
+  const modifier = event.metaKey || event.ctrlKey;
+  const typing = isTypingTarget(event.target);
+
+  if (modifier && lowerKey === "z") {
     event.preventDefault();
+    commitCaptionEdit();
     if (event.shiftKey) redo(); else undo();
     return;
   }
-  if ((tag === "input" || tag === "select" || tag === "textarea") && event.key !== "Escape") return;
-  if (event.key === " ") { event.preventDefault(); video.paused ? video.play() : video.pause(); return; }
-  if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
-  const before = projectSnapshot();
-  const layer = currentLayer();
-  const step = event.shiftKey ? 10 : 1;
-  if (event.key === "ArrowUp") layer.position.y -= step;
-  if (event.key === "ArrowDown") layer.position.y += step;
-  if (event.key === "ArrowLeft") layer.position.x -= step;
-  if (event.key === "ArrowRight") layer.position.x += step;
-  layer.position.x = Math.max(0, Math.min(DESIGN_WIDTH, layer.position.x));
-  layer.position.y = Math.max(0, Math.min(DESIGN_HEIGHT, layer.position.y));
-  updateLayerSelection();
-  updateStageGeometry();
-  recordHistory(before);
+  if (modifier && lowerKey === "y") {
+    event.preventDefault();
+    commitCaptionEdit();
+    redo();
+    return;
+  }
+  if (modifier && lowerKey === "s") {
+    event.preventDefault();
+    saveProject();
+    return;
+  }
+  if (modifier && event.shiftKey && lowerKey === "o") {
+    event.preventDefault();
+    projectInput.click();
+    return;
+  }
+  if (modifier && lowerKey === "o") {
+    event.preventDefault();
+    videoInput.click();
+    return;
+  }
+  if (modifier && key === "Enter") {
+    event.preventDefault();
+    if (!transcribeButton.disabled) void transcribe();
+    return;
+  }
+  if (modifier && lowerKey === "e") {
+    event.preventDefault();
+    if (!state.hasAlignment) return;
+    void exportOutput(event.shiftKey);
+    return;
+  }
+  if (key === "Escape") {
+    if (shortcutsDialog?.open) {
+      closeShortcuts();
+      event.preventDefault();
+      return;
+    }
+    if (typing) {
+      event.target.blur?.();
+      commitCaptionEdit();
+      return;
+    }
+    if (selectedOverlayId) {
+      selectedOverlayId = null;
+      renderOverlays();
+    }
+    if (selectedCaptionIndex !== null) closeCaptionEditor();
+    document.querySelectorAll(".font-menu").forEach((menu) => menu.classList.add("hidden"));
+    $("export-menu").classList.add("hidden");
+    return;
+  }
+  if (typing) return;
+  if (key === "?") {
+    event.preventDefault();
+    openShortcuts();
+    return;
+  }
+  if (key === "t" || key === "T") {
+    event.preventDefault();
+    addTextOverlay();
+    return;
+  }
+  if (key === "i" || key === "I") {
+    event.preventDefault();
+    showTool("overlays");
+    imageInput.click();
+    return;
+  }
+  if (key === "r" || key === "R") {
+    event.preventDefault();
+    resetLayout();
+    return;
+  }
+  if (key === "+" || key === "=") {
+    event.preventDefault();
+    changeTimelineZoom(1);
+    return;
+  }
+  if (key === "-") {
+    event.preventDefault();
+    changeTimelineZoom(-1);
+    return;
+  }
+  if (key === "Delete" || key === "Backspace") {
+    if (event.repeat) return;
+    if (deleteSelectedOverlay() || deleteSelectedCaption()) event.preventDefault();
+    return;
+  }
+  if (key === " ") {
+    event.preventDefault();
+    togglePlayback();
+    return;
+  }
+  if (key === "k" || key === "K") {
+    event.preventDefault();
+    togglePlayback();
+    return;
+  }
+  if (key === "j" || key === "J") {
+    event.preventDefault();
+    seekBy(-5);
+    return;
+  }
+  if (key === "l" || key === "L") {
+    event.preventDefault();
+    seekBy(5);
+    return;
+  }
+  if (key === "Home") {
+    event.preventDefault();
+    seekBy(-(video.currentTime || 0));
+    return;
+  }
+  if (key === "End") {
+    event.preventDefault();
+    if (Number.isFinite(video.duration)) seekBy(video.duration - (video.currentTime || 0));
+    return;
+  }
+  if (key === "[" || key === "]") {
+    event.preventDefault();
+    selectAdjacentCaption(key === "]" ? 1 : -1);
+    return;
+  }
+  if (["1", "2", "3", "4"].includes(key)) {
+    event.preventDefault();
+    showTool(["captions", "layout", "overlays", "engine"][Number(key) - 1]);
+    return;
+  }
+  if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key)) return;
+  event.preventDefault();
+  nudgeSelection(key, event.shiftKey ? 10 : 1);
 });
 
 updateLayerSelection();
