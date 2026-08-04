@@ -218,6 +218,33 @@ describe("ASS caption generation", () => {
     expect(ass).toContain("Style: Translation,Arial,92,&H0000FF00,");
   });
 
+  it("accepts a configurable Arabic active-word highlight colour", () => {
+    const canonical = index.words[0]!;
+    const word: AlignedWord = {
+      start: 0.4,
+      end: 1.2,
+      surah: canonical.surah,
+      verse: canonical.verse,
+      verseKey: canonical.verseKey,
+      position: canonical.position,
+      arabic: canonical.word.text.uthmani,
+      imlaei: canonical.word.text.imlaei,
+      wordTranslation: canonical.word.translation,
+      verseTranslation: canonical.verseData.translations.saheehInternational,
+      confidence: 1,
+      inferredTiming: false,
+      canonicalIndex: canonical.index,
+    };
+
+    const ass = createAss([word], index, 1, {
+      arabicColor: "#FFFFFF",
+      arabicHighlightColor: "#00FF00",
+    });
+
+    expect(ass).toContain("Style: Quran,Amiri Quran,310,&H00FFFFFF,&H0000FF00,");
+    expect(ass).toContain("{\\c&H0000FF00&\\b1}");
+  });
+
   it("accepts independently positioned caption layers", () => {
     const canonical = index.words[0]!;
     const word: AlignedWord = {

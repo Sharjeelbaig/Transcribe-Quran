@@ -165,9 +165,9 @@ export function buildScene({ project, words = [], surahNames, time = 0, duration
       kind: "text",
       segments: ordered.map((word) => ({
         text: String(word.arabic ?? ""),
-        // The inspector colour is authoritative. A playback highlight must
-        // never silently replace a user-selected caption colour.
-        color: arabicColor,
+        color: word.verseKey === current.verseKey && word.position === current.position
+          ? (arabic.highlightColor || "#FFD700")
+          : arabicColor,
       })),
       gapEm: ARABIC_WORD_GAP_EM,
       center: { x: arabic.position.x, y: arabic.position.y },

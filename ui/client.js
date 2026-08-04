@@ -56,7 +56,7 @@ let state = {
       offline: false
     },
     layout: {
-      arabic: { position: { x: 540, y: 894 }, fontSize: 310, color: "#FFFFFF" },
+      arabic: { position: { x: 540, y: 894 }, fontSize: 310, color: "#FFFFFF", highlightColor: "#FFD700" },
       translation: { position: { x: 540, y: 1135 }, fontSize: 92, color: "#FFFFFF" }
     },
     overlays: [],
@@ -431,6 +431,7 @@ function selectCaption(index, seek = true) {
 function syncControlsFromProject() {
   const settings = state.project.settings;
   const arabicColor = state.project.layout.arabic.color || "#FFFFFF";
+  const arabicHighlightColor = state.project.layout.arabic.highlightColor || "#FFD700";
   const translationColor = state.project.layout.translation.color || "#FFFFFF";
   $("translation").value = settings.translation;
   $("words").value = settings.wordsPerCaption;
@@ -440,8 +441,10 @@ function syncControlsFromProject() {
   $("translation-size").value = settings.translationFontSize;
   $("caption-gap").value = settings.captionGap;
   $("arabic-color").value = arabicColor;
+  $("arabic-highlight-color").value = arabicHighlightColor;
   $("translation-color").value = translationColor;
   $("arabic-color-value").textContent = arabicColor;
+  $("arabic-highlight-color-value").textContent = arabicHighlightColor;
   $("translation-color-value").textContent = translationColor;
   $("speech-pause").value = settings.speechPauseSeconds ?? 0.6;
   $("min-word-seconds").value = settings.minimumWordSeconds ?? 0.5;
@@ -470,8 +473,10 @@ function syncSettingsFromControls() {
   settings.translationFontSize = Math.max(1, Number($("translation-size").value) || 92);
   settings.captionGap = Math.max(0, Number($("caption-gap").value) || 0);
   state.project.layout.arabic.color = $("arabic-color").value.toUpperCase();
+  state.project.layout.arabic.highlightColor = $("arabic-highlight-color").value.toUpperCase();
   state.project.layout.translation.color = $("translation-color").value.toUpperCase();
   $("arabic-color-value").textContent = state.project.layout.arabic.color;
+  $("arabic-highlight-color-value").textContent = state.project.layout.arabic.highlightColor;
   $("translation-color-value").textContent = state.project.layout.translation.color;
   settings.speechPauseSeconds = Math.min(5, Math.max(0.05, Number($("speech-pause").value) || 0.6));
   settings.minimumWordSeconds = Math.min(3, Math.max(0.05, Number($("min-word-seconds").value) || 0.5));
@@ -1703,7 +1708,7 @@ shortcutsDialog?.addEventListener("click", (event) => {
   if (event.target === shortcutsDialog) closeShortcuts();
 });
 
-for (const id of ["translation", "words", "arabic-font", "translation-font", "arabic-size", "translation-size", "caption-gap", "arabic-color", "translation-color", "speech-pause", "offline", "model", "dtype", "confidence"]) {
+for (const id of ["translation", "words", "arabic-font", "translation-font", "arabic-size", "translation-size", "caption-gap", "arabic-color", "arabic-highlight-color", "translation-color", "speech-pause", "offline", "model", "dtype", "confidence"]) {
   $(id).addEventListener("input", () => { syncSettingsFromControls(); updateStageGeometry(); });
   $(id).addEventListener("change", () => { syncSettingsFromControls(); updateStageGeometry(); });
 }

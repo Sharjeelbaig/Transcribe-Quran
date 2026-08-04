@@ -4,7 +4,7 @@ import { buildScene } from "../ui/renderer.js";
 const project = {
   settings: { wordsPerCaption: 3, arabicFontName: "Amiri Quran", translationFontName: "Arial", arabicFontSize: 310, translationFontSize: 92 },
   layout: {
-    arabic: { position: { x: 540, y: 894 }, fontSize: 310, color: "#FFFFFF", visual: { animationIn: { preset: "fade", duration: 500 }, animationOut: { preset: "fade", duration: 500 } } },
+    arabic: { position: { x: 540, y: 894 }, fontSize: 310, color: "#FFFFFF", highlightColor: "#FFD700", visual: { animationIn: { preset: "fade", duration: 500 }, animationOut: { preset: "fade", duration: 500 } } },
     translation: { position: { x: 540, y: 1135 }, fontSize: 92, color: "#FFFFFF", visual: { animationIn: { preset: "fade", duration: 500 }, animationOut: { preset: "fade", duration: 500 } } },
   },
   overlays: [],
@@ -37,13 +37,19 @@ describe("grouped caption preview scene", () => {
     expect(exiting.items[0].transition.opacity).toBeLessThan(1);
   });
 
-  it("keeps the selected caption colour on the active word", () => {
-    const singleWordProject = {
-      ...project,
-      settings: { ...project.settings, wordsPerCaption: 1 },
-    };
-    const scene = buildScene({ project: singleWordProject, words, time: 1.5 });
+  it("uses the selected highlight colour on the active word", () => {
+    const scene = buildScene({ project, words, time: 2.7 });
 
-    expect(scene.items[0].segments[0].color).toBe("#FFFFFF");
+    expect(scene.items[0].segments.map((segment) => segment.color)).toEqual(["#FFFFFF", "#FFD700", "#FFFFFF"]);
+  });
+
+  it("uses the gold highlight default for older projects", () => {
+    const legacyProject = {
+      ...project,
+      layout: { ...project.layout, arabic: { ...project.layout.arabic, highlightColor: undefined } },
+    };
+    const scene = buildScene({ project: legacyProject, words, time: 2.7 });
+
+    expect(scene.items[0].segments[1].color).toBe("#FFD700");
   });
 });

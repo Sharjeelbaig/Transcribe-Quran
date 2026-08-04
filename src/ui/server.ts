@@ -491,6 +491,9 @@ function bodyProject(base: UiProject, incoming: unknown): UiProject {
   const arabicColor = layout?.arabic?.color !== undefined
     ? validColor(layout.arabic.color, "layout.arabic.color")
     : base.layout.arabic.color;
+  const arabicHighlightColor = layout?.arabic?.highlightColor !== undefined
+    ? validColor(layout.arabic.highlightColor, "layout.arabic.highlightColor")
+    : base.layout.arabic.highlightColor;
   const translationColor = layout?.translation?.color !== undefined
     ? validColor(layout.translation.color, "layout.translation.color")
     : base.layout.translation.color;
@@ -502,6 +505,7 @@ function bodyProject(base: UiProject, incoming: unknown): UiProject {
         position: designPosition(layout?.arabic?.position, "layout.arabic.position"),
         fontSize: numeric(layout?.arabic?.fontSize, "layout.arabic.fontSize", 0.1),
         color: arabicColor,
+        ...(arabicHighlightColor !== undefined ? { highlightColor: arabicHighlightColor } : {}),
         ...(arabicVisual !== undefined ? { visual: arabicVisual } : {}),
       },
       translation: {
@@ -635,6 +639,7 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
       arabicFontName: settings.arabicFontName,
       translationFontName: settings.translationFontName,
       arabicColor: project.layout.arabic.color ?? "#FFFFFF",
+      arabicHighlightColor: project.layout.arabic.highlightColor ?? "#FFD700",
       translationColor: project.layout.translation.color ?? "#FFFFFF",
       arabicFontSize: project.layout.arabic.fontSize,
       translationFontSize: project.layout.translation.fontSize,

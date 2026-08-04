@@ -116,8 +116,8 @@ immediately, or omit the path and use the drag-and-drop area or file picker in
 the browser. The editor previews synchronized Qur'an captions, lets you drag
 caption layers, resize them, change the current caption settings, search
 installed/bundled fonts, import local `.ttf`, `.otf`, `.woff`, or `.woff2`
-fonts, save a project file, add text/image overlays, and export ASS subtitles
-or a rendered MP4.
+fonts, choose the active-word highlight colour, save a project file, add
+text/image overlays, and export ASS subtitles or a rendered MP4.
 
 **Export MP4 exactly as previewed** renders in the browser, not with FFmpeg.
 The preview and the exporter call the same renderer (`ui/renderer.js`) — the

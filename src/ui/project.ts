@@ -42,6 +42,8 @@ export interface UiCaptionLayer {
   fontSize: number;
   /** Fill colour for this caption layer. */
   color: string;
+  /** Fill colour for the Arabic word currently being recited. */
+  highlightColor?: string;
   visual?: UiLayerVisual;
 }
 
@@ -166,6 +168,7 @@ export function defaultCaptionLayerPositions(settings: Pick<UiCaptionSettings, "
       },
       fontSize: settings.arabicFontSize,
       color: "#FFFFFF",
+      highlightColor: "#FFD700",
     },
     translation: {
       position: {
