@@ -902,9 +902,6 @@ function renderState(next) {
   syncOverlayControls();
   renderTimeline();
   updateCaptionEditor();
-  const alignmentBadge = $("alignment-badge");
-  alignmentBadge.textContent = state.hasAlignment ? "Ready" : state.job.status === "running" ? "Working…" : "Not transcribed";
-  alignmentBadge.setAttribute("aria-live", "polite");
   transcribeButton.setAttribute("aria-busy", String(state.job.status === "running"));
   if (state.job.status === "running") setStatus(state.job.message || "Working locally…");
   else if (state.job.status === "error") setStatus(state.job.message || "Something went wrong.", true);

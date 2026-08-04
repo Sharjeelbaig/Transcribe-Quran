@@ -26,7 +26,7 @@
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-pill: 999px;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Roboto, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 body.theme-dark {
@@ -56,16 +56,15 @@ button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .45; }
 .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.75; }
-.app-header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 72px; padding: 12px 24px; border-bottom: 1px solid color-mix(in srgb, var(--border) 35%, transparent); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(18px); }
+.app-header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 64px; padding: 8px 24px; border-bottom: 1px solid color-mix(in srgb, var(--border) 18%, transparent); background: var(--surface); }
 .brand-block, .header-actions, .toolbar-actions, .toolbar-context, .field-label-row, .inspector-title, .timeline-heading, .subsection-heading { display: flex; align-items: center; }
-.brand-block { gap: 10px; min-width: 240px; }
-.brand-mark { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--accent); border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .06em; }
-.brand-name { font-size: 13px; font-weight: 750; letter-spacing: -.01em; }
-.project-name { max-width: 220px; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.status-chip { margin-left: 6px; padding: 5px 10px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border)); border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--accent); font-size: 10px; font-weight: 650; white-space: nowrap; }
-.header-actions { position: relative; gap: 7px; }
+.brand-block { gap: 16px; min-width: 280px; }
+.brand-mark { display: grid; width: 48px; height: 48px; flex: 0 0 48px; place-items: center; border: 0; border-radius: 16px; background: var(--accent-soft); color: var(--accent); font-size: 14px; font-weight: 700; letter-spacing: .02em; }
+.brand-name { font-size: 18px; font-weight: 600; line-height: 24px; letter-spacing: 0; }
+.project-name { max-width: 300px; overflow: hidden; color: var(--muted); font-size: 14px; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.header-actions { position: relative; gap: 4px; }
 .header-divider { width: 1px; height: 22px; margin: 0 5px; background: var(--border); }
-.icon-button { display: inline-grid; width: 40px; height: 40px; place-items: center; padding: 0; border: 1px solid transparent; border-radius: var(--radius-pill); background: transparent; color: var(--muted); transition: background .16s ease, color .16s ease, transform .16s ease; }
+.icon-button { display: inline-grid; width: 48px; height: 48px; place-items: center; padding: 0; border: 1px solid transparent; border-radius: var(--radius-pill); background: transparent; color: var(--muted); transition: background .16s ease, color .16s ease; }
 .icon-button:hover:not(:disabled), .icon-button:focus-visible { border-color: var(--border); background: var(--surface-soft); color: var(--text); outline: none; }
 .icon-button svg { width: 16px; height: 16px; }
 .quiet { color: var(--muted); }
