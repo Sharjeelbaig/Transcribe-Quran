@@ -72,6 +72,13 @@ svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-lineca
 .button.outline { background: transparent; }
 .button.small { min-height: 36px; padding: 7px 13px; font-size: 11px; }
 .button.full-width { width: 100%; }
+.split-button { display: inline-flex; align-items: stretch; }
+.split-button .button { border-radius: 0; }
+.split-button .button:first-child { border-radius: var(--radius-pill) 0 0 var(--radius-pill); }
+.split-button .button + .button { margin-left: -1px; }
+.split-button .button:last-child { border-radius: 0 var(--radius-pill) var(--radius-pill) 0; }
+.split-button-menu { width: 42px; min-width: 42px; padding: 0; }
+.split-button-menu .chevron { margin: 0; }
 .chevron { width: 13px !important; height: 13px !important; margin-left: 1px; }
 .popover { position: absolute; z-index: 30; border: 1px solid color-mix(in srgb, var(--border) 45%, transparent); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow); }
 .export-menu { top: calc(100% + 7px); right: 0; width: 210px; padding: 5px; }
@@ -164,7 +171,7 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 .font-option small { color: var(--faint); font-size: 9px; }
 .select-shell { position: relative; width: 100%; }
 .transport .select-shell { flex: 0 0 78px; width: 78px; }
-.native-select { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.native-select { display: none !important; }
 .select-trigger { display: flex; width: 100%; min-height: 42px; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--border) 82%, transparent); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); text-align: left; transition: border-color .16s ease, box-shadow .16s ease; }
 .select-trigger:hover { border-color: var(--accent); }
 .select-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -186,8 +193,10 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 .overlay-row.active { border-color: var(--accent); background: var(--accent-soft); }
 .overlay-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list-empty { padding: 12px 3px; color: var(--faint); font-size: 11px; }
-.button-row { display: flex; gap: 6px; }
-.button-row .button { flex: 1; }
+.button-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.button-row .button { min-width: 0; padding-inline: 10px; white-space: normal; }
+.overlay-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.compact-action { min-height: 48px; line-height: 1.1; }
 .subsection { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
 .advanced-settings { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--border); }
 .advanced-settings summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: var(--text); font-size: 11px; font-weight: 700; list-style: none; }
@@ -196,9 +205,12 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 .advanced-settings[open] summary::before { transform: rotate(90deg); }
 .advanced-settings summary span { margin-left: auto; color: var(--faint); font-size: 10px; font-weight: 500; }
 .advanced-settings .hint { margin-top: 9px; }
-.caption-editor { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+.caption-editor { margin-top: 22px; padding-top: 18px; border-top: 1px solid color-mix(in srgb, var(--border) 32%, transparent); }
+.caption-editor .subsection-heading { align-items: flex-start; }
 .caption-editor-title { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; font-weight: 500; }
-.caption-editor-meta { margin-top: -8px; color: var(--faint); font-size: 10px; }
+.caption-editor-meta { margin: 6px 0 2px; color: var(--faint); font-size: 10px; }
+.caption-editor .field-grid { margin-top: 4px; }
+.caption-editor .button-row { margin-top: 12px; }
 .subsection-heading { justify-content: space-between; font-size: 11px; }
 .text-button { padding: 0; border: 0; background: transparent; color: var(--danger); font-size: 10px; }
 .shortcuts-dialog { width: min(520px, calc(100vw - 32px)); max-height: min(720px, calc(100vh - 32px)); padding: 20px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }

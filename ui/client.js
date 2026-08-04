@@ -23,6 +23,7 @@ const timeLabel = $("time-label");
 const transcribeButton = $("transcribe-button");
 const exportSubtitles = $("export-subtitles");
 const exportVideo = $("export-video");
+const exportPrimary = $("export-primary");
 const downloadVideo = $("download-video");
 const downloadLinks = $("download-links");
 const videoInput = $("video-input");
@@ -100,6 +101,7 @@ function icon(button, symbol) {
 function enhanceSelect(select) {
   if (!select || select.dataset.customSelect === "true") return;
   select.dataset.customSelect = "true";
+  select.classList.add("native-select");
   const shell = document.createElement("div");
   shell.className = "select-shell";
   select.parentNode.insertBefore(shell, select);
@@ -522,6 +524,7 @@ function updateVideoStage() {
     transcribeButton.disabled = true;
     exportSubtitles.disabled = true;
     exportVideo.disabled = true;
+    exportPrimary.disabled = true;
     downloadVideo.disabled = true;
     return;
   }
@@ -530,6 +533,7 @@ function updateVideoStage() {
   transcribeButton.disabled = state.job.status === "running";
   exportSubtitles.disabled = !state.hasAlignment;
   exportVideo.disabled = !state.hasAlignment;
+  exportPrimary.disabled = !state.hasAlignment;
   // Only offered once a render exists to download.
   downloadVideo.disabled = !lastRender && !state.outputs?.video;
   if (state.project.videoPath && loadedVideoKey !== state.project.videoPath) {
@@ -1273,6 +1277,8 @@ async function uploadFont(file) {
 }
 
 function showTool(tool) {
+  document.querySelectorAll(".select-menu").forEach((menu) => menu.classList.add("hidden"));
+  document.querySelectorAll(".select-trigger").forEach((trigger) => trigger.setAttribute("aria-expanded", "false"));
   document.querySelectorAll("[data-tool]").forEach((button) => button.classList.toggle("active", button.dataset.tool === tool));
   document.querySelectorAll(".inspector-section").forEach((section) => section.classList.toggle("hidden", section.id !== `tool-${tool}`));
 }
@@ -1474,6 +1480,7 @@ $("delete-overlay").addEventListener("click", deleteSelectedOverlay);
 transcribeButton.addEventListener("click", transcribe);
 exportSubtitles.addEventListener("click", () => exportOutput(false));
 exportVideo.addEventListener("click", renderVideoLocally);
+exportPrimary.addEventListener("click", renderVideoLocally);
 $("render-cancel").addEventListener("click", () => exportJob?.abort());
 downloadVideo.addEventListener("click", () => {
   if (lastRender) {
@@ -1489,10 +1496,15 @@ downloadVideo.addEventListener("click", () => {
 
 $("export-menu-button").addEventListener("click", (event) => {
   event.stopPropagation();
-  $("export-menu").classList.toggle("hidden");
+  const menu = $("export-menu");
+  menu.classList.toggle("hidden");
+  $("export-menu-button").setAttribute("aria-expanded", String(!menu.classList.contains("hidden")));
 });
 document.addEventListener("click", (event) => {
-  if (!event.target.closest("#export-menu") && !event.target.closest("#export-menu-button")) $("export-menu").classList.add("hidden");
+  if (!event.target.closest("#export-menu") && !event.target.closest("#export-menu-button")) {
+    $("export-menu").classList.add("hidden");
+    $("export-menu-button").setAttribute("aria-expanded", "false");
+  }
   if (!event.target.closest(".font-picker")) document.querySelectorAll(".font-menu").forEach((menu) => menu.classList.add("hidden"));
   if (!event.target.closest(".select-shell")) document.querySelectorAll(".select-menu").forEach((menu) => menu.classList.add("hidden"));
 });
