@@ -156,6 +156,37 @@ describe("ASS caption generation", () => {
     expect(ass).toContain("Dialogue: 1,0:00:00.40,0:00:01.20,Translation");
   });
 
+  it("animates a multi-word caption only when the grouped line enters and exits", () => {
+    const canonical = index.words.slice(0, 3);
+    const words: AlignedWord[] = canonical.map((item, index) => ({
+      start: index + 1,
+      end: index + 2,
+      displayStart: index + 1,
+      displayEnd: index + 2,
+      surah: item.surah,
+      verse: item.verse,
+      verseKey: item.verseKey,
+      position: item.position,
+      arabic: item.word.text.uthmani,
+      imlaei: item.word.text.imlaei,
+      wordTranslation: item.word.translation,
+      verseTranslation: item.verseData.translations.saheehInternational,
+      confidence: 1,
+      inferredTiming: false,
+      canonicalIndex: item.index,
+    }));
+    const ass = createAss(words, index, 3, {
+      arabicVisual: { animationIn: { preset: "fade", duration: 250 }, animationOut: { preset: "fade", duration: 250 } },
+      translationVisual: { animationIn: { preset: "fade", duration: 250 }, animationOut: { preset: "fade", duration: 250 } },
+    });
+    const arabicEvents = ass.split("\n").filter((line) => line.includes(",Quran,"));
+    const middle = arabicEvents.find((line) => line.includes("0:00:02.00,0:00:03.00"));
+
+    expect(arabicEvents.some((line) => line.includes("\\alpha&HFF&"))).toBe(true);
+    expect(middle).toBeDefined();
+    expect(middle).not.toContain("\\alpha");
+  });
+
   it("rejects a negative caption gap", () => {
     expect(() => createAss([], index, 1, { captionGap: -1 })).toThrow("non-negative number");
   });
@@ -175,6 +206,16 @@ describe("ASS caption generation", () => {
 
     expect(ass).toContain("Style: Quran,Amiri,310,");
     expect(ass).toContain("Style: Translation,Georgia,92,");
+  });
+
+  it("accepts independent caption and translation colours", () => {
+    const ass = createAss([], index, 1, {
+      arabicColor: "#FF0000",
+      translationColor: "#00FF00",
+    });
+
+    expect(ass).toContain("Style: Quran,Amiri Quran,310,&H000000FF,");
+    expect(ass).toContain("Style: Translation,Arial,92,&H0000FF00,");
   });
 
   it("accepts independently positioned caption layers", () => {

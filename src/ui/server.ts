@@ -374,6 +374,13 @@ function assColor(value: string | undefined, opacity = 1, fallback = "FFFFFF"): 
   return `&H${alpha}${rgb.slice(4, 6)}${rgb.slice(2, 4)}${rgb.slice(0, 2)}`;
 }
 
+function validColor(value: unknown, label: string): string {
+  if (typeof value !== "string" || !/^#[0-9a-f]{6}$/i.test(value)) {
+    throw new Error(`${label} must be a six-digit hex colour.`);
+  }
+  return value.toUpperCase();
+}
+
 function overlayTiming(overlay: UiOverlay, duration: number): { start: number; end: number } {
   const start = clamp(Number.isFinite(overlay.start) ? overlay.start! : 0, 0, duration);
   const requestedEnd = Number.isFinite(overlay.end) ? overlay.end! : duration;
@@ -481,6 +488,12 @@ function bodyProject(base: UiProject, incoming: unknown): UiProject {
   const translationVisual = layout?.translation?.visual !== undefined
     ? layerVisual(layout.translation.visual, "layout.translation.visual")
     : base.layout.translation.visual;
+  const arabicColor = layout?.arabic?.color !== undefined
+    ? validColor(layout.arabic.color, "layout.arabic.color")
+    : base.layout.arabic.color;
+  const translationColor = layout?.translation?.color !== undefined
+    ? validColor(layout.translation.color, "layout.translation.color")
+    : base.layout.translation.color;
   const next: UiProject = {
     ...base,
     settings: mergeSettings(base.settings, value.settings ?? {}),
@@ -488,11 +501,13 @@ function bodyProject(base: UiProject, incoming: unknown): UiProject {
       arabic: {
         position: designPosition(layout?.arabic?.position, "layout.arabic.position"),
         fontSize: numeric(layout?.arabic?.fontSize, "layout.arabic.fontSize", 0.1),
+        color: arabicColor,
         ...(arabicVisual !== undefined ? { visual: arabicVisual } : {}),
       },
       translation: {
         position: designPosition(layout?.translation?.position, "layout.translation.position"),
         fontSize: numeric(layout?.translation?.fontSize, "layout.translation.fontSize", 0.1),
+        color: translationColor,
         ...(translationVisual !== undefined ? { visual: translationVisual } : {}),
       },
     },
@@ -619,6 +634,8 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
     const assOptions = {
       arabicFontName: settings.arabicFontName,
       translationFontName: settings.translationFontName,
+      arabicColor: project.layout.arabic.color ?? "#FFFFFF",
+      translationColor: project.layout.translation.color ?? "#FFFFFF",
       arabicFontSize: project.layout.arabic.fontSize,
       translationFontSize: project.layout.translation.fontSize,
       captionGap: settings.captionGap,

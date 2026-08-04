@@ -40,6 +40,8 @@ export interface UiPoint {
 export interface UiCaptionLayer {
   position: UiPoint;
   fontSize: number;
+  /** Fill colour for this caption layer. */
+  color: string;
   visual?: UiLayerVisual;
 }
 
@@ -163,6 +165,7 @@ export function defaultCaptionLayerPositions(settings: Pick<UiCaptionSettings, "
         y: Math.round(centerY - (settings.translationFontSize + settings.captionGap) / 2),
       },
       fontSize: settings.arabicFontSize,
+      color: "#FFFFFF",
     },
     translation: {
       position: {
@@ -170,6 +173,7 @@ export function defaultCaptionLayerPositions(settings: Pick<UiCaptionSettings, "
         y: Math.round(centerY + (settings.arabicFontSize + settings.captionGap) / 2),
       },
       fontSize: settings.translationFontSize,
+      color: "#FFFFFF",
     },
   };
 }

@@ -7,7 +7,7 @@ import { findActiveCaptionIndex } from "./caption-timing.js";
 export const DESIGN_WIDTH = 1080;
 export const DESIGN_HEIGHT = 1920;
 
-const ACTIVE_WORD_COLOR = "#ffd529";
+const ACTIVE_WORD_COLOR = "#ffd700";
 const CAPTION_COLOR = "#ffffff";
 const ARABIC_WORD_GAP_EM = 0.24;
 const OVERLAY_PADDING_Y = 12;
@@ -95,16 +95,28 @@ export function transitionState(visual, start, end, now, distanceDesign) {
 }
 
 function captionGroup(words, time, wordsPerCaption) {
-  const index = findActiveCaptionIndex(words, time);
-  if (index < 0) return undefined;
-  const current = words[index];
   const count = Math.max(1, Math.floor(numberOr(wordsPerCaption, 1)));
-  const groupStart = Math.floor((Math.max(1, current.position) - 1) / count) * count + 1;
-  const groupEnd = groupStart + count - 1;
-  const group = words.filter(
-    (word) => word.verseKey === current.verseKey && word.position >= groupStart && word.position <= groupEnd,
-  );
-  return { current, group };
+  const groups = new Map();
+  for (const word of words) {
+    const groupStart = Math.floor((Math.max(1, word.position) - 1) / count) * count + 1;
+    const key = `${word.verseKey}:${groupStart}`;
+    const group = groups.get(key) || [];
+    group.push(word);
+    groups.set(key, group);
+  }
+  for (const group of groups.values()) {
+    group.sort((left, right) => left.position - right.position);
+    const start = numberOr(group[0]?.displayStart ?? group[0]?.start, 0);
+    const end = numberOr(group.at(-1)?.displayEnd ?? group.at(-1)?.end, start);
+    const lookAhead = 0.12;
+    if (time < start - lookAhead || time > end) continue;
+    const activeIndex = findActiveCaptionIndex(group, time, lookAhead);
+    const current = activeIndex >= 0
+      ? group[activeIndex]
+      : [...group].reverse().find((word) => time >= numberOr(word.displayStart ?? word.start, 0)) || group[0];
+    return { current, group, start, end };
+  }
+  return undefined;
 }
 
 function overlayWindow(overlay, duration) {
@@ -144,18 +156,20 @@ export function buildScene({ project, words = [], surahNames, time = 0, duration
   const settings = project.settings || {};
   const active = captionGroup(words, time, settings.wordsPerCaption);
   if (active) {
-    const { current, group } = active;
-    const start = numberOr(current.displayStart ?? current.start, 0);
-    const end = numberOr(current.displayEnd ?? current.end, start);
+    const { current, group, start, end } = active;
     const ordered = group.slice().sort((left, right) => right.position - left.position);
     const arabic = project.layout.arabic;
     const translation = project.layout.translation;
+    const arabicColor = arabic.color || CAPTION_COLOR;
+    const activeArabicColor = group.length === 1 && arabicColor.toUpperCase() !== CAPTION_COLOR.toUpperCase()
+      ? arabicColor
+      : ACTIVE_WORD_COLOR;
     items.push({
       id: "caption:arabic",
       kind: "text",
       segments: ordered.map((word) => ({
         text: String(word.arabic ?? ""),
-        color: word.position === current.position ? ACTIVE_WORD_COLOR : CAPTION_COLOR,
+        color: word.position === current.position ? activeArabicColor : arabicColor,
       })),
       gapEm: ARABIC_WORD_GAP_EM,
       center: { x: arabic.position.x, y: arabic.position.y },
@@ -174,7 +188,7 @@ export function buildScene({ project, words = [], surahNames, time = 0, duration
     items.push({
       id: "caption:translation",
       kind: "text",
-      segments: [{ text: `${current.wordTranslation ?? ""}  •  ${current.verseKey}`, color: CAPTION_COLOR }],
+      segments: [{ text: `${current.wordTranslation ?? ""}  •  ${current.verseKey}`, color: translation.color || CAPTION_COLOR }],
       gapEm: 0,
       center: { x: translation.position.x, y: translation.position.y },
       fontSize: Math.max(1, numberOr(translation.fontSize, settings.translationFontSize)),

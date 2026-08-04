@@ -54,8 +54,8 @@ let state = {
       offline: false
     },
     layout: {
-      arabic: { position: { x: 540, y: 894 }, fontSize: 310 },
-      translation: { position: { x: 540, y: 1135 }, fontSize: 92 }
+      arabic: { position: { x: 540, y: 894 }, fontSize: 310, color: "#FFFFFF" },
+      translation: { position: { x: 540, y: 1135 }, fontSize: 92, color: "#FFFFFF" }
     },
     overlays: [],
     captionEdits: {}
@@ -92,6 +92,84 @@ const requestedFonts = new Set();
 
 function icon(button, symbol) {
   if (button) button.innerHTML = `<svg><use href="#${symbol}"/></svg>`;
+}
+
+/** Turns native selects into small, keyboard-friendly MD3-style menus while
+ * keeping the original select in the DOM as the source of truth. This keeps
+ * project syncing and form semantics intact without depending on a UI kit. */
+function enhanceSelect(select) {
+  if (!select || select.dataset.customSelect === "true") return;
+  select.dataset.customSelect = "true";
+  const shell = document.createElement("div");
+  shell.className = "select-shell";
+  select.parentNode.insertBefore(shell, select);
+  shell.appendChild(select);
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "select-trigger";
+  trigger.setAttribute("aria-haspopup", "listbox");
+  trigger.setAttribute("aria-expanded", "false");
+  trigger.setAttribute("aria-label", select.getAttribute("aria-label") || "Choose an option");
+  trigger.innerHTML = '<span class="select-value"></span><svg class="chevron"><use href="#i-chevron"/></svg>';
+  const menu = document.createElement("div");
+  menu.className = "select-menu popover hidden";
+  menu.setAttribute("role", "listbox");
+  shell.insertBefore(trigger, select);
+  shell.insertBefore(menu, select);
+
+  const sync = () => {
+    const option = [...select.options].find((candidate) => candidate.value === select.value) || select.options[0];
+    shell.querySelector(".select-value").textContent = option?.textContent || "Choose…";
+    menu.querySelectorAll("button").forEach((button) => {
+      const active = button.dataset.value === select.value;
+      button.classList.toggle("selected", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+  };
+  const close = () => {
+    menu.classList.add("hidden");
+    trigger.setAttribute("aria-expanded", "false");
+  };
+  const open = () => {
+    document.querySelectorAll(".select-menu").forEach((other) => {
+      if (other !== menu) other.classList.add("hidden");
+    });
+    menu.classList.remove("hidden");
+    trigger.setAttribute("aria-expanded", "true");
+  };
+  select._syncCustom = sync;
+  [...select.options].forEach((option) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "select-option";
+    item.dataset.value = option.value;
+    item.setAttribute("role", "option");
+    item.textContent = option.textContent;
+    item.addEventListener("click", () => {
+      select.value = option.value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      close();
+      trigger.focus();
+    });
+    menu.appendChild(item);
+  });
+  trigger.addEventListener("click", () => {
+    if (menu.classList.contains("hidden")) open(); else close();
+  });
+  trigger.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      open();
+      menu.querySelector("button.selected")?.focus();
+    }
+    if (event.key === "Escape") close();
+  });
+  select.addEventListener("change", sync);
+  sync();
+}
+
+function enhanceSelects() {
+  document.querySelectorAll("select").forEach((select) => enhanceSelect(select));
 }
 
 function projectSnapshot() {
@@ -261,6 +339,8 @@ function selectCaption(index, seek = true) {
 
 function syncControlsFromProject() {
   const settings = state.project.settings;
+  const arabicColor = state.project.layout.arabic.color || "#FFFFFF";
+  const translationColor = state.project.layout.translation.color || "#FFFFFF";
   $("translation").value = settings.translation;
   $("words").value = settings.wordsPerCaption;
   $("arabic-font").value = settings.arabicFontName;
@@ -268,6 +348,10 @@ function syncControlsFromProject() {
   $("arabic-size").value = settings.arabicFontSize;
   $("translation-size").value = settings.translationFontSize;
   $("caption-gap").value = settings.captionGap;
+  $("arabic-color").value = arabicColor;
+  $("translation-color").value = translationColor;
+  $("arabic-color-value").textContent = arabicColor;
+  $("translation-color-value").textContent = translationColor;
   $("speech-pause").value = settings.speechPauseSeconds ?? 0.6;
   $("min-word-seconds").value = settings.minimumWordSeconds ?? 0.5;
   $("caption-hold").value = settings.captionHoldSeconds ?? 0.35;
@@ -281,6 +365,7 @@ function syncControlsFromProject() {
   $("layer-y").value = Math.round(state.project.layout[selectedLayer].position.y);
   $("project-title").textContent = state.project.videoName ? `${state.project.videoName} · local project` : "Untitled project";
   $("video-name").textContent = state.project.videoName || "No video selected";
+  document.querySelectorAll("select").forEach((select) => select._syncCustom?.());
 }
 
 function syncSettingsFromControls() {
@@ -292,6 +377,10 @@ function syncSettingsFromControls() {
   settings.arabicFontSize = Math.max(1, Number($("arabic-size").value) || 310);
   settings.translationFontSize = Math.max(1, Number($("translation-size").value) || 92);
   settings.captionGap = Math.max(0, Number($("caption-gap").value) || 0);
+  state.project.layout.arabic.color = $("arabic-color").value.toUpperCase();
+  state.project.layout.translation.color = $("translation-color").value.toUpperCase();
+  $("arabic-color-value").textContent = state.project.layout.arabic.color;
+  $("translation-color-value").textContent = state.project.layout.translation.color;
   settings.speechPauseSeconds = Math.min(5, Math.max(0.05, Number($("speech-pause").value) || 0.6));
   settings.minimumWordSeconds = Math.min(3, Math.max(0.05, Number($("min-word-seconds").value) || 0.5));
   // Zero is a valid hold, so an empty field falls back rather than reading as 0.
@@ -1405,6 +1494,7 @@ $("export-menu-button").addEventListener("click", (event) => {
 document.addEventListener("click", (event) => {
   if (!event.target.closest("#export-menu") && !event.target.closest("#export-menu-button")) $("export-menu").classList.add("hidden");
   if (!event.target.closest(".font-picker")) document.querySelectorAll(".font-menu").forEach((menu) => menu.classList.add("hidden"));
+  if (!event.target.closest(".select-shell")) document.querySelectorAll(".select-menu").forEach((menu) => menu.classList.add("hidden"));
 });
 
 for (const kind of ["arabic", "translation"]) {
@@ -1432,7 +1522,7 @@ shortcutsDialog?.addEventListener("click", (event) => {
   if (event.target === shortcutsDialog) closeShortcuts();
 });
 
-for (const id of ["translation", "words", "arabic-font", "translation-font", "arabic-size", "translation-size", "caption-gap", "speech-pause", "offline", "model", "dtype", "confidence"]) {
+for (const id of ["translation", "words", "arabic-font", "translation-font", "arabic-size", "translation-size", "caption-gap", "arabic-color", "translation-color", "speech-pause", "offline", "model", "dtype", "confidence"]) {
   $(id).addEventListener("input", () => { syncSettingsFromControls(); updateStageGeometry(); });
   $(id).addEventListener("change", () => { syncSettingsFromControls(); updateStageGeometry(); });
 }
@@ -1604,6 +1694,7 @@ document.addEventListener("keydown", (event) => {
     }
     if (selectedCaptionIndex !== null) closeCaptionEditor();
     document.querySelectorAll(".font-menu").forEach((menu) => menu.classList.add("hidden"));
+    document.querySelectorAll(".select-menu").forEach((menu) => menu.classList.add("hidden"));
     $("export-menu").classList.add("hidden");
     return;
   }
@@ -1689,6 +1780,7 @@ document.addEventListener("keydown", (event) => {
   nudgeSelection(key, event.shiftKey ? 10 : 1);
 });
 
+enhanceSelects();
 updateLayerSelection();
 showTool("captions");
 icon(playButton, "i-play");
