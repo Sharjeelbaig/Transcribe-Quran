@@ -32,6 +32,7 @@ const imageInput = $("image-input");
 const fontInput = $("font-input");
 const captionTrack = $("caption-track");
 const timelineSummary = $("timeline-summary");
+const renderProgress = $("render-progress");
 const toast = $("toast");
 const captionEditor = $("caption-editor");
 const shortcutsDialog = $("shortcuts-dialog");
@@ -102,6 +103,7 @@ function enhanceSelect(select) {
   if (!select || select.dataset.customSelect === "true") return;
   select.dataset.customSelect = "true";
   select.classList.add("native-select");
+  const labelText = select.closest("label")?.childNodes[0]?.textContent?.trim();
   const shell = document.createElement("div");
   shell.className = "select-shell";
   select.parentNode.insertBefore(shell, select);
@@ -111,11 +113,15 @@ function enhanceSelect(select) {
   trigger.className = "select-trigger";
   trigger.setAttribute("aria-haspopup", "listbox");
   trigger.setAttribute("aria-expanded", "false");
-  trigger.setAttribute("aria-label", select.getAttribute("aria-label") || "Choose an option");
+  trigger.setAttribute("aria-label", select.getAttribute("aria-label") || labelText || "Choose an option");
   trigger.innerHTML = '<span class="select-value"></span><svg class="chevron"><use href="#i-chevron"/></svg>';
   const menu = document.createElement("div");
   menu.className = "select-menu popover hidden";
   menu.setAttribute("role", "listbox");
+  if (select.id) {
+    menu.id = `${select.id}-menu`;
+    trigger.setAttribute("aria-controls", menu.id);
+  }
   shell.insertBefore(trigger, select);
   shell.insertBefore(menu, select);
 
@@ -134,10 +140,19 @@ function enhanceSelect(select) {
   };
   const open = () => {
     document.querySelectorAll(".select-menu").forEach((other) => {
-      if (other !== menu) other.classList.add("hidden");
+      if (other !== menu) {
+        other.classList.add("hidden");
+        other.parentElement?.querySelector(".select-trigger")?.setAttribute("aria-expanded", "false");
+      }
     });
     menu.classList.remove("hidden");
     trigger.setAttribute("aria-expanded", "true");
+  };
+  const choose = (value) => {
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    close();
+    trigger.focus();
   };
   select._syncCustom = sync;
   [...select.options].forEach((option) => {
@@ -147,11 +162,30 @@ function enhanceSelect(select) {
     item.dataset.value = option.value;
     item.setAttribute("role", "option");
     item.textContent = option.textContent;
-    item.addEventListener("click", () => {
-      select.value = option.value;
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-      close();
-      trigger.focus();
+    item.addEventListener("click", () => choose(option.value));
+    item.addEventListener("keydown", (event) => {
+      const items = [...menu.querySelectorAll(".select-option")];
+      const index = items.indexOf(item);
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        items[(index + 1) % items.length]?.focus();
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        items[(index - 1 + items.length) % items.length]?.focus();
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        items[0]?.focus();
+      } else if (event.key === "End") {
+        event.preventDefault();
+        items.at(-1)?.focus();
+      } else if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        choose(option.value);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+        trigger.focus();
+      }
     });
     menu.appendChild(item);
   });
@@ -172,6 +206,44 @@ function enhanceSelect(select) {
 
 function enhanceSelects() {
   document.querySelectorAll("select").forEach((select) => enhanceSelect(select));
+}
+
+function enhanceRange(input) {
+  if (!input || input.dataset.rangeEnhanced === "true" || input.classList.contains("scrubber")) return;
+  input.dataset.rangeEnhanced = "true";
+  input.classList.add("range-input");
+  const shell = document.createElement("div");
+  shell.className = "range-shell";
+  const track = document.createElement("span");
+  track.className = "range-track";
+  track.setAttribute("aria-hidden", "true");
+  const fill = document.createElement("span");
+  fill.className = "range-fill";
+  fill.setAttribute("aria-hidden", "true");
+  input.parentNode.insertBefore(shell, input);
+  shell.append(track, fill, input);
+  const sync = () => {
+    const min = Number(input.min || 0);
+    const max = Number(input.max);
+    const value = Number(input.value);
+    const ratio = Number.isFinite(max) && max > min
+      ? Math.max(0, Math.min(1, (value - min) / (max - min)))
+      : 0;
+    shell.style.setProperty("--range-progress", `${ratio * 100}%`);
+    input.setAttribute("aria-valuetext", `${Math.round(value)}%`);
+  };
+  input._syncRange = sync;
+  input.addEventListener("input", sync);
+  input.addEventListener("change", sync);
+  sync();
+}
+
+function enhanceRanges() {
+  document.querySelectorAll('input[type="range"]:not(.scrubber)').forEach((input) => enhanceRange(input));
+}
+
+function syncRanges() {
+  document.querySelectorAll('input[type="range"]:not(.scrubber)').forEach((input) => input._syncRange?.());
 }
 
 function projectSnapshot() {
@@ -215,6 +287,23 @@ function formatTime(seconds) {
   const minutes = Math.floor(value / 60);
   const remainder = Math.floor(value % 60);
   return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+function syncScrubber() {
+  if (!timeline) return;
+  const duration = Number.isFinite(video.duration) ? Math.max(0, video.duration) : Math.max(0, Number(timeline.max) || 0);
+  const current = Math.max(0, Math.min(duration, Number(video.currentTime) || 0));
+  const progress = duration > 0 ? (current / duration) * 100 : 0;
+  timeline.closest(".scrubber-shell")?.style.setProperty("--scrubber-progress", `${progress}%`);
+  timeline.setAttribute("aria-valuetext", `${formatTime(current)} of ${formatTime(duration)}`);
+}
+
+function syncTimelinePlayhead() {
+  if (!captionTrack) return;
+  const duration = Number(state.alignment?.durationSeconds || video.duration || 0);
+  const current = Math.max(0, Math.min(duration, Number(video.currentTime) || 0));
+  const progress = duration > 0 ? (current / duration) * 100 : 0;
+  captionTrack.style.setProperty("--timeline-progress", `${progress}%`);
 }
 
 async function api(path, options = {}) {
@@ -368,6 +457,7 @@ function syncControlsFromProject() {
   $("project-title").textContent = state.project.videoName ? `${state.project.videoName} · local project` : "Untitled project";
   $("video-name").textContent = state.project.videoName || "No video selected";
   document.querySelectorAll("select").forEach((select) => select._syncCustom?.());
+  syncRanges();
 }
 
 function syncSettingsFromControls() {
@@ -400,6 +490,7 @@ function updateLayerSelection() {
   document.querySelectorAll("[data-select-layer]").forEach((button) => {
     const active = button.dataset.selectLayer === selectedLayer;
     button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
   });
   $("layer-x").value = Math.round(state.project.layout[selectedLayer].position.x);
   $("layer-y").value = Math.round(state.project.layout[selectedLayer].position.y);
@@ -420,6 +511,7 @@ function updateLayerSelection() {
   $("layer-animation-out").value = visual.animationOut?.preset || "none";
   $("layer-animation-in-duration").value = visual.animationIn?.duration ?? 250;
   $("layer-animation-out-duration").value = visual.animationOut?.duration ?? 250;
+  syncRanges();
   paintStage();
 }
 
@@ -548,11 +640,18 @@ function renderCaption() {
 }
 
 function updatePlayer() {
-  if (!Number.isFinite(video.duration)) return;
+  if (!Number.isFinite(video.duration)) {
+    syncScrubber();
+    syncTimelinePlayhead();
+    return;
+  }
   timeline.max = String(video.duration);
-  timeline.value = String(video.currentTime || 0);
+  timeline.value = String(Math.max(0, Math.min(video.duration, video.currentTime || 0)));
+  syncScrubber();
+  syncTimelinePlayhead();
   timeLabel.textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
   icon(playButton, video.paused ? "i-play" : "i-pause");
+  playButton.setAttribute("aria-label", video.paused ? "Play preview" : "Pause preview");
   document.querySelectorAll(".timeline-word").forEach((element) => {
     const index = Number(element.dataset.index);
     const word = effectiveWord(index);
@@ -560,6 +659,7 @@ function updatePlayer() {
     const displayEnd = word?.displayEnd ?? word?.end;
     element.classList.toggle("active", Boolean(word && video.currentTime >= displayStart && video.currentTime <= displayEnd));
     element.classList.toggle("selected", selectedCaptionIndex === index);
+    element.setAttribute("aria-pressed", String(selectedCaptionIndex === index));
   });
   renderCaption();
   renderOverlays();
@@ -591,13 +691,26 @@ function renderTimeline() {
   const words = entries.map((entry) => entry.word);
   const duration = Number(state.alignment?.durationSeconds || video.duration || 0);
   if (!words.length || !duration) {
-    captionTrack.innerHTML = '<div class="track-empty">Caption events will appear here.</div>';
+    captionTrack.innerHTML = '<div class="track-empty">Caption events will appear here.</div><span class="timeline-playhead" aria-hidden="true"></span>';
     timelineSummary.textContent = "Transcribe a video to see ayahs and words.";
+    syncTimelinePlayhead();
     return;
   }
   const fragment = document.createDocumentFragment();
-  const ayahs = new Set(words.map((word) => word.verseKey));
+  const ayahs = new Map();
+  words.forEach((word) => {
+    if (!ayahs.has(word.verseKey)) ayahs.set(word.verseKey, Number(word.displayStart ?? word.start));
+  });
   timelineSummary.textContent = `${words.length} matched words · ${ayahs.size} ayahs`;
+  ayahs.forEach((start, verseKey) => {
+    const marker = document.createElement("span");
+    marker.className = "timeline-ayah-marker";
+    marker.textContent = verseKey || "Ayah";
+    marker.title = `Ayah ${verseKey || ""}`.trim();
+    marker.style.left = `${Math.max(0, start / duration) * 100}%`;
+    marker.setAttribute("aria-hidden", "true");
+    fragment.appendChild(marker);
+  });
   entries.forEach((entry) => {
     const word = entry.word;
     const displayStart = Number(word.displayStart ?? word.start);
@@ -607,6 +720,8 @@ function renderTimeline() {
     event.type = "button";
     event.dataset.index = String(entry.index);
     event.title = `${word.verseKey} · ${word.arabic}`;
+    event.setAttribute("aria-label", `Caption ${word.verseKey}, ${word.arabic}, ${formatTime(displayStart)} to ${formatTime(displayEnd)}`);
+    event.setAttribute("aria-pressed", String(selectedCaptionIndex === entry.index));
     event.style.left = `${Math.max(0, displayStart / duration) * 100}%`;
     event.style.width = `${Math.max(.25, (displayEnd - displayStart) / duration * 100)}%`;
     event.innerHTML = '<span class="timeline-handle timeline-handle-start" aria-hidden="true"></span><span class="timeline-handle timeline-handle-end" aria-hidden="true"></span>';
@@ -617,7 +732,12 @@ function renderTimeline() {
     });
     fragment.appendChild(event);
   });
+  const playhead = document.createElement("span");
+  playhead.className = "timeline-playhead";
+  playhead.setAttribute("aria-hidden", "true");
+  fragment.appendChild(playhead);
   captionTrack.appendChild(fragment);
+  syncTimelinePlayhead();
 }
 
 function beginTimingDrag(event, index, edge) {
@@ -681,6 +801,7 @@ function renderOverlayList() {
     row.className = `overlay-row${overlay.id === selectedOverlayId ? " active" : ""}`;
     const label = overlay.type === "text" ? (overlay.autoSurah ? "Detected chapter" : overlay.text || "Text overlay") : "Image overlay";
     row.innerHTML = `<span>${escapeHtml(label)}</span><span>${overlay.visible ? overlay.type : "hidden"}</span>`;
+    row.setAttribute("aria-pressed", String(overlay.id === selectedOverlayId));
     row.addEventListener("click", () => {
       selectedOverlayId = overlay.id;
       selectedCaptionIndex = null;
@@ -739,6 +860,7 @@ function syncOverlayControls() {
   $("overlay-lock").checked = Boolean(overlay.locked);
   $("overlay-visible").checked = overlay.visible !== false;
   $("overlay-text-wrap").querySelector("input").placeholder = overlay.autoSurah ? "e.g. Detected chapter: {surah}" : "";
+  syncRanges();
 }
 
 function renderState(next) {
@@ -750,7 +872,10 @@ function renderState(next) {
   syncOverlayControls();
   renderTimeline();
   updateCaptionEditor();
-  $("alignment-badge").textContent = state.hasAlignment ? "Ready" : state.job.status === "running" ? "Working…" : "Not transcribed";
+  const alignmentBadge = $("alignment-badge");
+  alignmentBadge.textContent = state.hasAlignment ? "Ready" : state.job.status === "running" ? "Working…" : "Not transcribed";
+  alignmentBadge.setAttribute("aria-live", "polite");
+  transcribeButton.setAttribute("aria-busy", String(state.job.status === "running"));
   if (state.job.status === "running") setStatus(state.job.message || "Working locally…");
   else if (state.job.status === "error") setStatus(state.job.message || "Something went wrong.", true);
   else if (state.job.status === "complete") setStatus(state.job.message || "Ready to edit.");
@@ -829,7 +954,9 @@ async function exportOutput(burnVideo) {
 }
 
 function showRenderProgress(visible) {
-  $("render-progress").classList.toggle("hidden", !visible);
+  renderProgress.classList.toggle("hidden", !visible);
+  renderProgress.setAttribute("aria-hidden", String(!visible));
+  document.body.classList.toggle("rendering", visible);
   if (!visible) {
     $("render-bar-fill").style.width = "0%";
     $("render-progress-label").textContent = "Rendering…";
@@ -1279,7 +1406,11 @@ async function uploadFont(file) {
 function showTool(tool) {
   document.querySelectorAll(".select-menu").forEach((menu) => menu.classList.add("hidden"));
   document.querySelectorAll(".select-trigger").forEach((trigger) => trigger.setAttribute("aria-expanded", "false"));
-  document.querySelectorAll("[data-tool]").forEach((button) => button.classList.toggle("active", button.dataset.tool === tool));
+  document.querySelectorAll("[data-tool]").forEach((button) => {
+    const active = button.dataset.tool === tool;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
   document.querySelectorAll(".inspector-section").forEach((section) => section.classList.toggle("hidden", section.id !== `tool-${tool}`));
 }
 
@@ -1305,6 +1436,8 @@ function toggleTheme() {
   const dark = document.body.classList.toggle("theme-dark");
   localStorage.setItem("transcribe-quran-theme", dark ? "dark" : "light");
   icon($("theme-toggle"), dark ? "i-moon" : "i-sun");
+  $("theme-toggle").setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+  $("theme-toggle").dataset.tooltip = dark ? "Switch to light theme" : "Switch to dark theme";
 }
 
 function openShortcuts() {
@@ -1404,7 +1537,14 @@ video.addEventListener("play", () => { updatePlayer(); startCaptionPreviewAnimat
 video.addEventListener("pause", () => { stopCaptionPreviewAnimation(); updatePlayer(); });
 video.addEventListener("ended", () => { stopCaptionPreviewAnimation(); updatePlayer(); });
 playButton.addEventListener("click", () => (video.paused ? video.play() : video.pause()));
-timeline.addEventListener("input", () => { video.currentTime = Number(timeline.value); updatePlayer(); });
+timeline.addEventListener("input", () => {
+  const duration = Number(video.duration) || Number(timeline.max) || 0;
+  const next = Math.max(0, Math.min(duration, Number(timeline.value) || 0));
+  timeline.value = String(next);
+  video.currentTime = next;
+  syncScrubber();
+  updatePlayer();
+});
 $("speed-select").addEventListener("change", (event) => { video.playbackRate = Number(event.target.value); });
 
 stageCanvas.addEventListener("pointerdown", onStagePointerDown);
@@ -1497,8 +1637,34 @@ downloadVideo.addEventListener("click", () => {
 $("export-menu-button").addEventListener("click", (event) => {
   event.stopPropagation();
   const menu = $("export-menu");
-  menu.classList.toggle("hidden");
-  $("export-menu-button").setAttribute("aria-expanded", String(!menu.classList.contains("hidden")));
+  const open = menu.classList.toggle("hidden") === false;
+  $("export-menu-button").setAttribute("aria-expanded", String(open));
+  if (open) menu.querySelector("[role=menuitem]:not(:disabled)")?.focus();
+});
+$("export-menu-button").addEventListener("keydown", (event) => {
+  if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    $("export-menu-button").click();
+  } else if (event.key === "Escape") {
+    $("export-menu").classList.add("hidden");
+    $("export-menu-button").setAttribute("aria-expanded", "false");
+  }
+});
+$("export-menu").addEventListener("keydown", (event) => {
+  const items = [...$("export-menu").querySelectorAll("[role=menuitem]:not(:disabled)")];
+  const index = items.indexOf(document.activeElement);
+  if (event.key === "ArrowDown" && items.length) {
+    event.preventDefault();
+    items[(index + 1) % items.length].focus();
+  } else if (event.key === "ArrowUp" && items.length) {
+    event.preventDefault();
+    items[(index - 1 + items.length) % items.length].focus();
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    $("export-menu").classList.add("hidden");
+    $("export-menu-button").setAttribute("aria-expanded", "false");
+    $("export-menu-button").focus();
+  }
 });
 document.addEventListener("click", (event) => {
   if (!event.target.closest("#export-menu") && !event.target.closest("#export-menu-button")) {
@@ -1506,7 +1672,10 @@ document.addEventListener("click", (event) => {
     $("export-menu-button").setAttribute("aria-expanded", "false");
   }
   if (!event.target.closest(".font-picker")) document.querySelectorAll(".font-menu").forEach((menu) => menu.classList.add("hidden"));
-  if (!event.target.closest(".select-shell")) document.querySelectorAll(".select-menu").forEach((menu) => menu.classList.add("hidden"));
+  if (!event.target.closest(".select-shell")) {
+    document.querySelectorAll(".select-menu").forEach((menu) => menu.classList.add("hidden"));
+    document.querySelectorAll(".select-trigger").forEach((trigger) => trigger.setAttribute("aria-expanded", "false"));
+  }
 });
 
 for (const kind of ["arabic", "translation"]) {
@@ -1615,8 +1784,10 @@ function changeTimelineZoom(direction) {
   const current = Math.max(0, levels.indexOf(timelineZoom));
   const next = direction === 0 ? (current + 1) % levels.length : Math.max(0, Math.min(levels.length - 1, current + direction));
   timelineZoom = levels[next];
-  $("timeline-zoom").setAttribute("aria-label", `Timeline zoom ${timelineZoom}x`);
-  $("timeline-zoom").dataset.tooltip = `Timeline zoom ${timelineZoom}x`;
+  const zoomLabel = `${timelineZoom}×`;
+  $("timeline-zoom-label").textContent = zoomLabel;
+  $("timeline-zoom").setAttribute("aria-label", `Timeline zoom ${zoomLabel}`);
+  $("timeline-zoom").dataset.tooltip = `Timeline zoom ${zoomLabel}`;
   renderTimeline();
 }
 
@@ -1792,12 +1963,16 @@ document.addEventListener("keydown", (event) => {
   nudgeSelection(key, event.shiftKey ? 10 : 1);
 });
 
+enhanceRanges();
 enhanceSelects();
 updateLayerSelection();
 showTool("captions");
 icon(playButton, "i-play");
-icon($("theme-toggle"), localStorage.getItem("transcribe-quran-theme") === "dark" ? "i-moon" : "i-sun");
-if (localStorage.getItem("transcribe-quran-theme") === "dark") document.body.classList.add("theme-dark");
+const prefersDarkTheme = localStorage.getItem("transcribe-quran-theme") === "dark";
+if (prefersDarkTheme) document.body.classList.add("theme-dark");
+icon($("theme-toggle"), prefersDarkTheme ? "i-moon" : "i-sun");
+$("theme-toggle").setAttribute("aria-label", prefersDarkTheme ? "Switch to light theme" : "Switch to dark theme");
+$("theme-toggle").dataset.tooltip = prefersDarkTheme ? "Switch to light theme" : "Switch to dark theme";
 updateHistoryButtons();
 loadFonts();
 loadSurahs();

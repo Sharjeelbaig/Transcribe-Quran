@@ -43,16 +43,18 @@
         <span class="header-divider"></span>
         <button id="shortcuts-button" class="icon-button quiet" data-tooltip="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><span class="help-mark">?</span></button>
         <button id="theme-toggle" class="icon-button quiet" data-tooltip="Toggle theme" aria-label="Toggle theme"><svg><use href="#i-sun"/></svg></button>
-        <button id="choose-button" class="button outline"><svg><use href="#i-upload"/></svg><span>Open video</span></button>
-        <button id="save-project" class="button outline"><svg><use href="#i-save"/></svg><span>Save project</span></button>
+        <div class="button-group header-project-actions" role="group" aria-label="Project actions">
+          <button id="choose-button" class="button outline"><svg><use href="#i-upload"/></svg><span>Open video</span></button>
+          <button id="save-project" class="button outline"><svg><use href="#i-save"/></svg><span>Save project</span></button>
+        </div>
         <div class="split-button" aria-label="Export options">
           <button id="export-primary" class="button primary" disabled><svg><use href="#i-export"/></svg><span>Export MP4</span></button>
-          <button id="export-menu-button" class="button primary split-button-menu" aria-label="More export options" aria-expanded="false"><svg class="chevron"><use href="#i-chevron"/></svg></button>
+          <button id="export-menu-button" class="button primary split-button-menu" aria-label="More export options" aria-haspopup="menu" aria-expanded="false"><svg class="chevron"><use href="#i-chevron"/></svg></button>
         </div>
-        <div id="export-menu" class="popover export-menu hidden">
-          <button id="export-video" class="menu-item" disabled><svg><use href="#i-export"/></svg><span>Export MP4 exactly as previewed</span></button>
-          <button id="download-video" class="menu-item" disabled><svg><use href="#i-download"/></svg><span>Download last export</span></button>
-          <button id="export-subtitles" class="menu-item" disabled><svg><use href="#i-download"/></svg><span>Download ASS subtitles</span></button>
+        <div id="export-menu" class="popover export-menu hidden" role="menu" aria-label="Export options">
+          <button id="export-video" class="menu-item" role="menuitem" disabled><svg><use href="#i-export"/></svg><span>Export MP4 exactly as previewed</span></button>
+          <button id="download-video" class="menu-item" role="menuitem" disabled><svg><use href="#i-download"/></svg><span>Download last export</span></button>
+          <button id="export-subtitles" class="menu-item" role="menuitem" disabled><svg><use href="#i-download"/></svg><span>Download ASS subtitles</span></button>
         </div>
       </div>
       <input id="video-input" type="file" accept="video/*,.mkv" hidden />
@@ -62,19 +64,21 @@
     </header>
 
     <div class="app-shell">
-      <aside class="tool-rail" aria-label="Editor tools">
-        <button class="rail-button active" data-tool="captions" data-tooltip="Captions" aria-label="Captions"><svg><use href="#i-captions"/></svg><span>Captions</span></button>
-        <button class="rail-button" data-tool="layout" data-tooltip="Layout" aria-label="Layout"><svg><use href="#i-layout"/></svg><span>Layout</span></button>
-        <button class="rail-button" data-tool="overlays" data-tooltip="Overlays" aria-label="Overlays"><svg><use href="#i-layers"/></svg><span>Overlays</span></button>
-        <button class="rail-button" data-tool="engine" data-tooltip="Engine" aria-label="Engine"><svg><use href="#i-settings"/></svg><span>Engine</span></button>
-      </aside>
+      <nav class="tool-rail" aria-label="Editor tools">
+        <button class="rail-button active" data-tool="captions" data-tooltip="Captions" aria-label="Captions" aria-current="page"><svg><use href="#i-captions"/></svg><span>Captions</span></button>
+        <button class="rail-button" data-tool="layout" data-tooltip="Layout" aria-label="Layout" aria-current="false"><svg><use href="#i-layout"/></svg><span>Layout</span></button>
+        <button class="rail-button" data-tool="overlays" data-tooltip="Overlays" aria-label="Overlays" aria-current="false"><svg><use href="#i-layers"/></svg><span>Overlays</span></button>
+        <button class="rail-button" data-tool="engine" data-tooltip="Engine" aria-label="Engine" aria-current="false"><svg><use href="#i-settings"/></svg><span>Engine</span></button>
+      </nav>
 
       <main class="editor-column">
         <div class="editor-toolbar">
           <div class="toolbar-context"><span class="context-dot"></span><span id="video-name">No video selected</span></div>
           <div class="toolbar-actions">
-            <button id="reset-layout" class="button small outline">Reset layout</button>
-            <button id="transcribe-button" class="button small primary" disabled><svg><use href="#i-captions"/></svg><span>Transcribe locally</span></button>
+            <div class="button-group" role="group" aria-label="Transcription actions">
+              <button id="reset-layout" class="button small outline">Reset layout</button>
+              <button id="transcribe-button" class="button small primary" disabled><svg><use href="#i-captions"/></svg><span>Transcribe locally</span></button>
+            </div>
           </div>
         </div>
 
@@ -95,30 +99,40 @@
         </section>
 
         <section class="transport" aria-label="Playback controls">
-          <button id="play-button" class="transport-play" disabled aria-label="Play or pause"><svg><use href="#i-play"/></svg></button>
+          <button id="play-button" class="transport-play" disabled aria-label="Play preview"><svg><use href="#i-play"/></svg></button>
           <span id="time-label" class="time-label">00:00 / 00:00</span>
-          <input id="timeline" class="scrubber" type="range" min="0" max="0" value="0" step="0.01" disabled />
+          <div class="scrubber-shell">
+            <span class="scrubber-track" aria-hidden="true"></span>
+            <span class="scrubber-fill" aria-hidden="true"></span>
+            <input id="timeline" class="scrubber" type="range" min="0" max="0" value="0" step="0.01" disabled aria-label="Preview position" />
+          </div>
           <select id="speed-select" class="compact-select" aria-label="Playback speed">
             <option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option>
           </select>
         </section>
 
-        <section class="timeline-panel">
-          <div class="timeline-heading"><div><strong>Caption timeline</strong><span id="timeline-summary">Transcribe a video to see ayahs and words.</span></div><button id="timeline-zoom" class="icon-button quiet" data-tooltip="Timeline zoom" aria-label="Timeline zoom"><svg><use href="#i-more"/></svg></button></div>
+        <section class="timeline-panel" aria-label="Caption timeline">
+          <div class="timeline-heading">
+            <div class="timeline-heading-copy">
+              <div class="timeline-title-row"><strong id="timeline-heading">Caption timeline</strong><span id="timeline-zoom-label" class="timeline-zoom-label">1×</span></div>
+              <span id="timeline-summary">Transcribe a video to see ayahs and words.</span>
+            </div>
+            <div class="timeline-heading-actions"><span class="timeline-help">Select a word to edit timing</span><button id="timeline-zoom" class="icon-button quiet" data-tooltip="Timeline zoom 1×" aria-label="Timeline zoom 1×"><svg><use href="#i-more"/></svg></button></div>
+          </div>
           <div class="caption-track-scroll"><div id="caption-track" class="caption-track"><div class="track-empty">Caption events will appear here.</div></div></div>
         </section>
-        <div id="render-progress" class="render-progress hidden">
+        <div id="render-progress" class="render-progress hidden" role="region" aria-live="polite" aria-label="Export progress" aria-hidden="true">
           <div class="render-bar"><span id="render-bar-fill"></span></div>
           <span id="render-progress-label">Rendering…</span>
           <button id="render-cancel" class="button small outline">Cancel</button>
         </div>
-        <p id="status" class="status" role="status">Choose a video to start.</p>
+        <p id="status" class="status" role="status" aria-live="polite">Choose a video to start.</p>
       </main>
 
       <aside class="inspector" aria-label="Inspector">
         <section id="tool-captions" class="inspector-section">
           <div class="inspector-title"><div><span class="section-kicker">CAPTIONS</span><h2>Text and style</h2></div><button class="icon-button quiet" data-tooltip="Caption help" aria-label="Caption help"><span class="help-mark">?</span></button></div>
-          <label>Translation<select id="translation"><option value="saheehInternational">Saheeh International</option><option value="abdulHaleem">Abdul Haleem</option><option value="taqiUsmani">Taqi Usmani</option><option value="pickthall">Pickthall</option><option value="yusufAli">Yusuf Ali</option></select></label>
+          <label>Translation<select id="translation" aria-label="Translation"><option value="saheehInternational">Saheeh International</option><option value="abdulHaleem">Abdul Haleem</option><option value="taqiUsmani">Taqi Usmani</option><option value="pickthall">Pickthall</option><option value="yusufAli">Yusuf Ali</option></select></label>
           <label>Words shown at once<input id="words" type="number" min="1" step="1" value="1" /></label>
           <div class="field-grid">
             <label>Arabic size<input id="arabic-size" type="number" min="1" step="1" value="310" /></label>
@@ -143,20 +157,20 @@
           </div>
           <label class="checkbox-row"><input id="offline" type="checkbox" /> Offline model access only</label>
           <details class="advanced-settings"><summary>Speech timing <span>Advanced</span></summary><label>Stop after quiet audio (seconds)<input id="speech-pause" type="number" min="0.05" max="5" step="0.05" value="0.60" /></label><p class="hint">A short breath keeps the current word visible. Only sustained quiet audio counts as the Imam stopping.</p><label>Minimum time on screen (seconds)<input id="min-word-seconds" type="number" min="0.05" max="3" step="0.05" value="0.50" /></label><p class="hint">No word is ever shown for less than this, so a quickly recited word cannot flash past unread.</p><label>Hold after a phrase ends (seconds)<input id="caption-hold" type="number" min="0" max="3" step="0.05" value="0.35" /></label><p class="hint">The last word of a phrase lingers this long into the silence after the Imam stops.</p></details>
-          <section id="caption-editor" class="caption-editor hidden">
-            <div class="subsection-heading"><div><strong>Edit selected caption</strong><span id="caption-editor-title" class="caption-editor-title"></span></div><button id="caption-close" class="text-button">Close</button></div>
+          <section id="caption-editor" class="caption-editor hidden" aria-labelledby="caption-editor-heading">
+            <div class="subsection-heading"><div><strong id="caption-editor-heading">Edit selected caption</strong><span id="caption-editor-title" class="caption-editor-title"></span></div><button id="caption-close" class="text-button">Close</button></div>
             <div id="caption-editor-meta" class="caption-editor-meta">Automatic match</div>
             <label>Arabic<textarea id="caption-arabic" dir="rtl" rows="2"></textarea></label>
             <label>Translation<textarea id="caption-translation" rows="2"></textarea></label>
             <div class="field-grid"><label>Start (seconds)<input id="caption-start" type="number" min="0" step="0.01" /></label><label>End (seconds)<input id="caption-end" type="number" min="0" step="0.01" /></label></div>
-            <div class="button-row"><button id="caption-shift-back" class="button outline">− 50 ms</button><button id="caption-shift-forward" class="button outline">+ 50 ms</button></div>
-            <div class="button-row"><button id="caption-hide" class="button outline">Delete caption</button><button id="caption-reset" class="button outline" disabled>Reset automatic</button></div>
+            <div class="button-row button-group button-group-fill" role="group" aria-label="Caption timing adjustments"><button id="caption-shift-back" class="button outline">− 50 ms</button><button id="caption-shift-forward" class="button outline">+ 50 ms</button></div>
+            <div class="button-row button-group button-group-fill" role="group" aria-label="Caption edit actions"><button id="caption-hide" class="button outline">Delete caption</button><button id="caption-reset" class="button outline" disabled>Reset automatic</button></div>
           </section>
         </section>
 
         <section id="tool-layout" class="inspector-section hidden">
           <div class="inspector-title"><div><span class="section-kicker">LAYOUT</span><h2>Selected layer</h2></div></div>
-          <div class="layer-picker"><button class="layer-button active" data-select-layer="arabic">Arabic</button><button class="layer-button" data-select-layer="translation">English</button></div>
+          <div class="layer-picker" role="tablist" aria-label="Caption layers"><button class="layer-button active" data-select-layer="arabic" role="tab" aria-selected="true">Arabic</button><button class="layer-button" data-select-layer="translation" role="tab" aria-selected="false">English</button></div>
           <p class="hint">Drag a caption on the canvas. Use the corner handle to resize it. Hold Shift with the arrow keys for larger moves.</p>
           <div class="field-grid"><label>X position<input id="layer-x" type="number" min="0" max="1080" step="1" /></label><label>Y position<input id="layer-y" type="number" min="0" max="1920" step="1" /></label></div>
           <div class="subsection-heading compact"><strong>Appearance</strong></div>
@@ -164,21 +178,21 @@
           <div class="field-grid"><label>Outline width<input id="layer-outline" type="number" min="0" max="20" step="0.5" value="3" /></label><label>Shadow distance<input id="layer-shadow" type="number" min="0" max="20" step="0.5" value="1" /></label></div>
           <div class="effect-grid"><div class="effect-control"><label class="checkbox-row"><input id="layer-outline-enabled" type="checkbox" checked /> Outline</label><input id="layer-outline-opacity" type="range" min="0" max="100" step="1" value="100" aria-label="Outline opacity" /><output id="layer-outline-opacity-value">100%</output></div><div class="effect-control"><label class="checkbox-row"><input id="layer-shadow-enabled" type="checkbox" checked /> Shadow</label><input id="layer-shadow-opacity" type="range" min="0" max="100" step="1" value="44" aria-label="Shadow opacity" /><output id="layer-shadow-opacity-value">44%</output></div></div>
           <div class="field-grid"><label>Outline colour<input id="layer-outline-color" type="color" value="#101010" /></label><label>Shadow colour<input id="layer-shadow-color" type="color" value="#000000" /></label></div>
-          <details class="advanced-settings transition-settings"><summary>Transition <span>Optional</span></summary><div class="field-grid"><label>Enter<select id="layer-animation-in"><option value="none">None</option><option value="fade">Fade</option><option value="slide-up">Rise</option><option value="slide-down">Drop</option><option value="scale">Zoom</option></select></label><label>Exit<select id="layer-animation-out"><option value="none">None</option><option value="fade">Fade</option><option value="slide-up">Rise</option><option value="slide-down">Drop</option><option value="scale">Zoom</option></select></label></div><div class="field-grid"><label>Enter time (ms)<input id="layer-animation-in-duration" type="number" min="0" max="5000" step="25" value="250" /></label><label>Exit time (ms)<input id="layer-animation-out-duration" type="number" min="0" max="5000" step="25" value="250" /></label></div><p class="hint">Transitions use the selected layer’s actual caption window and shorten automatically when a word is very brief.</p></details>
+          <details class="advanced-settings transition-settings"><summary>Transition <span>Optional</span></summary><div class="field-grid"><label>Enter<select id="layer-animation-in" aria-label="Enter animation"><option value="none">None</option><option value="fade">Fade</option><option value="slide-up">Rise</option><option value="slide-down">Drop</option><option value="scale">Zoom</option></select></label><label>Exit<select id="layer-animation-out" aria-label="Exit animation"><option value="none">None</option><option value="fade">Fade</option><option value="slide-up">Rise</option><option value="slide-down">Drop</option><option value="scale">Zoom</option></select></label></div><div class="field-grid"><label>Enter time (ms)<input id="layer-animation-in-duration" type="number" min="0" max="5000" step="25" value="250" /></label><label>Exit time (ms)<input id="layer-animation-out-duration" type="number" min="0" max="5000" step="25" value="250" /></label></div><p class="hint">Transitions use the selected layer’s actual caption window and shorten automatically when a word is very brief.</p></details>
           <button id="apply-layer-position" class="button outline full-width">Apply position</button>
         </section>
 
         <section id="tool-overlays" class="inspector-section hidden">
           <div class="inspector-title"><div><span class="section-kicker">OVERLAYS</span><h2>Extra layers</h2></div></div>
           <div id="overlay-list" class="overlay-list"><div class="list-empty">No extra overlays yet.</div></div>
-          <div class="button-row overlay-actions"><button id="add-text" class="button outline compact-action"><span>＋</span> Text</button><button id="add-image" class="button outline compact-action"><span>＋</span> Image</button><button id="add-surah" class="button outline compact-action"><span>＋</span> Detected<br />chapter</button></div>
+          <div class="button-row button-group overlay-actions" role="group" aria-label="Add overlay"><button id="add-text" class="button outline compact-action"><span>＋</span> Text</button><button id="add-image" class="button outline compact-action"><span>＋</span> Image</button><button id="add-surah" class="button outline compact-action"><span>＋</span> Detected<br />chapter</button></div>
           <section id="overlay-editor" class="subsection hidden"><div class="subsection-heading"><strong>Selected overlay</strong><button id="delete-overlay" class="text-button">Delete</button></div><label id="overlay-text-wrap">Text<input id="overlay-text" type="text" value="New text" /></label><div class="field-grid"><label>Font<input id="overlay-font" type="text" value="Arial" /></label><label>Size<input id="overlay-size" type="number" min="1" step="1" value="72" /></label></div><div class="field-grid"><label>Start (s)<input id="overlay-start" type="number" min="0" step="0.01" value="0" /></label><label>End (s)<input id="overlay-end" type="number" min="0" step="0.01" /></label></div><div class="field-grid"><label>Opacity<input id="overlay-opacity" type="range" min="0" max="100" step="1" value="100" /></label><label>Rotation<input id="overlay-rotation" type="number" min="-180" max="180" step="1" value="0" /></label></div><div class="field-grid"><label>Outline width<input id="overlay-outline" type="number" min="0" max="20" step="0.5" value="3" /></label><label>Shadow distance<input id="overlay-shadow" type="number" min="0" max="20" step="0.5" value="1" /></label></div><div class="effect-grid"><div class="effect-control"><label class="checkbox-row"><input id="overlay-outline-enabled" type="checkbox" checked /> Outline</label><input id="overlay-outline-opacity" type="range" min="0" max="100" step="1" value="100" aria-label="Outline opacity" /><output id="overlay-outline-opacity-value">100%</output></div><div class="effect-control"><label class="checkbox-row"><input id="overlay-shadow-enabled" type="checkbox" checked /> Shadow</label><input id="overlay-shadow-opacity" type="range" min="0" max="100" step="1" value="44" aria-label="Shadow opacity" /><output id="overlay-shadow-opacity-value">44%</output></div></div><div class="field-grid"><label>Outline colour<input id="overlay-outline-color" type="color" value="#101010" /></label><label>Shadow colour<input id="overlay-shadow-color" type="color" value="#000000" /></label></div><div class="field-grid"><label>In<select id="overlay-animation-in"><option value="none">None</option><option value="fade">Fade</option></select></label><label>Out<select id="overlay-animation-out"><option value="none">None</option><option value="fade">Fade</option></select></label></div><label>Animation duration (ms)<input id="overlay-animation-duration" type="number" min="0" max="5000" step="50" value="250" /></label><label class="checkbox-row"><input id="overlay-visible" type="checkbox" checked /> Enabled</label><label class="checkbox-row"><input id="overlay-lock" type="checkbox" /> Lock layer</label><p class="hint">Drag the layer to place it, use the corner handle to resize, and the round handle to rotate.</p></section>
         </section>
 
         <section id="tool-engine" class="inspector-section hidden">
           <div class="inspector-title"><div><span class="section-kicker">ENGINE</span><h2>Transcription</h2></div></div>
           <label>Whisper model<input id="model" type="text" value="Sharjeelbaig/whisper-tiny-ar-quran-onnx" /></label>
-          <div class="field-grid"><label>Precision<select id="dtype"><option value="q8" selected>q8</option><option value="q4">q4</option><option value="fp16">fp16</option><option value="fp32">fp32</option></select></label><label>Confidence<input id="confidence" type="number" min="0" max="1" step="0.01" value="0.5" /></label></div>
+          <div class="field-grid"><label>Precision<select id="dtype" aria-label="Precision"><option value="q8" selected>q8</option><option value="q4">q4</option><option value="fp16">fp16</option><option value="fp32">fp32</option></select></label><label>Confidence<input id="confidence" type="number" min="0" max="1" step="0.01" value="0.5" /></label></div>
           <p class="hint">The model runs locally. Lower confidence allows more matches but can increase false positives.</p>
         </section>
 

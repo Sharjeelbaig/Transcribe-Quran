@@ -7,7 +7,6 @@ import { findActiveCaptionIndex } from "./caption-timing.js";
 export const DESIGN_WIDTH = 1080;
 export const DESIGN_HEIGHT = 1920;
 
-const ACTIVE_WORD_COLOR = "#ffd700";
 const CAPTION_COLOR = "#ffffff";
 const ARABIC_WORD_GAP_EM = 0.24;
 const OVERLAY_PADDING_Y = 12;
@@ -161,15 +160,14 @@ export function buildScene({ project, words = [], surahNames, time = 0, duration
     const arabic = project.layout.arabic;
     const translation = project.layout.translation;
     const arabicColor = arabic.color || CAPTION_COLOR;
-    const activeArabicColor = group.length === 1 && arabicColor.toUpperCase() !== CAPTION_COLOR.toUpperCase()
-      ? arabicColor
-      : ACTIVE_WORD_COLOR;
     items.push({
       id: "caption:arabic",
       kind: "text",
       segments: ordered.map((word) => ({
         text: String(word.arabic ?? ""),
-        color: word.position === current.position ? activeArabicColor : arabicColor,
+        // The inspector colour is authoritative. A playback highlight must
+        // never silently replace a user-selected caption colour.
+        color: arabicColor,
       })),
       gapEm: ARABIC_WORD_GAP_EM,
       center: { x: arabic.position.x, y: arabic.position.y },

@@ -36,4 +36,14 @@ describe("grouped caption preview scene", () => {
     expect(exiting.items[0].transition.opacity).toBeGreaterThan(0);
     expect(exiting.items[0].transition.opacity).toBeLessThan(1);
   });
+
+  it("keeps the selected caption colour on the active word", () => {
+    const singleWordProject = {
+      ...project,
+      settings: { ...project.settings, wordsPerCaption: 1 },
+    };
+    const scene = buildScene({ project: singleWordProject, words, time: 1.5 });
+
+    expect(scene.items[0].segments[0].color).toBe("#FFFFFF");
+  });
 });
