@@ -40,12 +40,12 @@ const shortcutsDialog = $("shortcuts-dialog");
 let state = {
   project: {
     settings: {
-      wordsPerCaption: 1,
+      wordsPerCaption: 3,
       translation: "saheehInternational",
       arabicFontName: "Amiri Quran",
       translationFontName: "Arial",
-      arabicFontSize: 310,
-      translationFontSize: 92,
+      arabicFontSize: 407,
+      translationFontSize: 150,
       captionGap: 40,
       speechPauseSeconds: 0.6,
       minimumWordSeconds: 0.5,
@@ -56,10 +56,35 @@ let state = {
       offline: false
     },
     layout: {
-      arabic: { position: { x: 540, y: 894 }, fontSize: 310, color: "#FFFFFF", highlightColor: "#FFD700" },
-      translation: { position: { x: 540, y: 1135 }, fontSize: 92, color: "#FFFFFF" }
+      arabic: {
+        position: { x: 540, y: 893.6249952746381 },
+        fontSize: 407,
+        color: "#FFFFFF",
+        highlightColor: "#FFD700",
+        visual: { opacity: 1, rotation: 0, outlineWidth: 0, shadowDistance: 20, outlineColor: "#101010", shadowColor: "#000000", outlineEnabled: false, shadowEnabled: true, outlineOpacity: 1, shadowOpacity: 1, animationIn: { preset: "none", duration: 250 }, animationOut: { preset: "none", duration: 250 } }
+      },
+      translation: {
+        position: { x: 540.9645317683082, y: 1456.3911465618266 },
+        fontSize: 150,
+        color: "#E1FF00",
+        visual: { opacity: 1, rotation: 0, outlineWidth: 10.5, shadowDistance: 1, outlineColor: "#000000", shadowColor: "#000000", outlineEnabled: false, shadowEnabled: true, outlineOpacity: 0, shadowOpacity: 1, animationIn: { preset: "none", duration: 250 }, animationOut: { preset: "none", duration: 250 } }
+      }
     },
-    overlays: [],
+    overlays: [{
+      id: "surah-default",
+      type: "text",
+      text: "{surah}",
+      autoSurah: true,
+      position: { x: 0.5007408352470869, y: 0.2696737610100933 },
+      width: 0.37051756400442293,
+      height: 0.03,
+      fontName: "Arial",
+      fontSize: 111,
+      color: "#FFFFFF",
+      visible: true,
+      start: 0,
+      visual: { opacity: 1, outlineWidth: 3, shadowDistance: 7.5, outlineColor: "#101010", shadowColor: "#000000", outlineEnabled: false, shadowEnabled: false, shadowOpacity: 1, animationIn: { preset: "none", duration: 250 }, animationOut: { preset: "none", duration: 250 } }
+    }],
     captionEdits: {}
   },
   hasVideo: false,
@@ -1183,9 +1208,8 @@ function endDrag() {
 
 function resetLayout() {
   const before = projectSnapshot();
-  const settings = state.project.settings;
-  state.project.layout.arabic.position = { x: DESIGN_WIDTH / 2, y: Math.round(DESIGN_HEIGHT / 2 - (settings.translationFontSize + settings.captionGap) / 2) };
-  state.project.layout.translation.position = { x: DESIGN_WIDTH / 2, y: Math.round(DESIGN_HEIGHT / 2 + (settings.arabicFontSize + settings.captionGap) / 2) };
+  state.project.layout.arabic.position = { x: 540, y: 893.6249952746381 };
+  state.project.layout.translation.position = { x: 540.9645317683082, y: 1456.3911465618266 };
   updateStageGeometry();
   syncControlsFromProject();
   recordHistory(before);
@@ -1233,18 +1257,18 @@ function addSurahOverlay() {
   const overlay = {
     id: `surah-${Date.now()}`,
     type: "text",
-    text: "Detected chapter: {surah}",
+    text: "{surah}",
     autoSurah: true,
-    position: { x: 0.78, y: 0.06 },
-    width: 0.4,
-    height: 0.06,
+    position: { x: 0.5007408352470869, y: 0.2696737610100933 },
+    width: 0.37051756400442293,
+    height: 0.03,
     fontName: "Arial",
-    fontSize: 48,
+    fontSize: 111,
     color: "#ffffff",
     visible: true,
     start: 0,
     end: Number(state.project.durationSeconds || video.duration || 0),
-    visual: { opacity: 1, outlineWidth: 3, shadowDistance: 1, animationIn: { preset: "none", duration: 250 }, animationOut: { preset: "none", duration: 250 } }
+    visual: { opacity: 1, outlineWidth: 3, shadowDistance: 7.5, outlineColor: "#101010", shadowColor: "#000000", outlineEnabled: false, shadowEnabled: false, shadowOpacity: 1, animationIn: { preset: "none", duration: 250 }, animationOut: { preset: "none", duration: 250 } }
   };
   state.project.overlays.push(overlay);
   selectedOverlayId = overlay.id;

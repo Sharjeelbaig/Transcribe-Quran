@@ -123,8 +123,9 @@ text/image overlays, and export ASS subtitles or a rendered MP4.
 The preview and the exporter call the same renderer (`ui/renderer.js`) — the
 editor paints it onto the stage canvas, the exporter paints it onto a canvas
 the size of the source video — so the file cannot drift from what you edited.
-Frames are encoded with WebCodecs and written to MP4 in the page, keeping the
-original picture, frame rate, and audio. This needs a Chromium-based browser;
+Frames are encoded at the source video's original dimensions and frame rate
+with a high-quality H.264 setting, then written to MP4 in the page. The source
+audio is carried across at high quality as well. This needs a Chromium-based browser;
 elsewhere the editor falls back to the FFmpeg render, which approximates the
 preview through libass. Rendering runs at roughly real time and continues in a
 background tab.

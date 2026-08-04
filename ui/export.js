@@ -4,7 +4,10 @@ import { buildScene, paintScene } from "./renderer.js";
 // Rendering happens frame by frame on a canvas at the source video's own
 // resolution, driven by the very renderer the editor paints with. The encoder
 // only ever sees pixels the editor already agreed to, which is what makes the
-// exported file match the preview instead of approximating it.
+// exported file match the preview instead of approximating it. The video is
+// encoded again because captions are burned into every frame, so the bitrate
+// is deliberately generous to avoid making that required encode visibly
+// softer than the source.
 
 const COMMON_FRAME_RATES = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60];
 const AVC_CANDIDATES = ["avc1.640034", "avc1.640033", "avc1.640028", "avc1.4d0034", "avc1.42003e"];
@@ -298,7 +301,7 @@ async function encodeAudio(buffer, muxer, signal, onProgress, maxSeconds) {
       failure = error;
     },
   });
-  encoder.configure({ codec: "mp4a.40.2", sampleRate, numberOfChannels: channels, bitrate: 192_000 });
+  encoder.configure({ codec: "mp4a.40.2", sampleRate, numberOfChannels: channels, bitrate: 320_000 });
   const source = [];
   for (let channel = 0; channel < channels; channel += 1) source.push(buffer.getChannelData(channel));
   for (let offset = 0; offset < totalFrames; offset += chunkFrames) {
@@ -342,7 +345,10 @@ export async function exportMp4({
   videoUrl,
   duration,
   frameRate,
-  quality = 0.15,
+  // H.264 bits per pixel per frame. 0.15 was enough for a small preview but
+  // visibly compressed detailed vertical video. This keeps the source size
+  // and frame rate while giving the captioned image a high-quality encode.
+  quality = 0.35,
   images,
   signal,
   onProgress,
@@ -382,7 +388,7 @@ export async function exportMp4({
     const audioBuffer = await decodeSourceAudio(source, signal);
     throwIfAborted(signal);
 
-    const bitrate = Math.round(Math.min(60_000_000, Math.max(3_000_000, width * height * fps * quality)));
+    const bitrate = Math.round(Math.min(100_000_000, Math.max(6_000_000, width * height * fps * quality)));
     const videoConfig = await pickVideoConfig(width, height, fps, bitrate);
     const target = new ArrayBufferTarget();
     muxer = new Muxer({

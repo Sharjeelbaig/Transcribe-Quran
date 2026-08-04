@@ -1,9 +1,7 @@
 import {
   DEFAULT_ARABIC_FONT_NAME,
-  DEFAULT_ARABIC_FONT_SIZE,
   DEFAULT_CAPTION_GAP,
   DEFAULT_TRANSLATION_FONT_NAME,
-  DEFAULT_TRANSLATION_FONT_SIZE,
 } from "../captions/ass.js";
 import { DEFAULT_MODEL } from "../model/session.js";
 import type { AlignmentDocument, AlignedWord, TranslationKey } from "../types.js";
@@ -159,36 +157,63 @@ export function applyCaptionEdits(alignment: AlignmentDocument, edits: UiCaption
 }
 
 export function defaultCaptionLayerPositions(settings: Pick<UiCaptionSettings, "arabicFontSize" | "translationFontSize" | "captionGap">): UiProject["layout"] {
-  const centerY = DESIGN_HEIGHT / 2;
   return {
     arabic: {
       position: {
-        x: DESIGN_WIDTH / 2,
-        y: Math.round(centerY - (settings.translationFontSize + settings.captionGap) / 2),
+        x: 540,
+        y: 893.6249952746381,
       },
       fontSize: settings.arabicFontSize,
       color: "#FFFFFF",
       highlightColor: "#FFD700",
+      visual: {
+        opacity: 1,
+        rotation: 0,
+        outlineWidth: 0,
+        shadowDistance: 20,
+        outlineColor: "#101010",
+        shadowColor: "#000000",
+        outlineEnabled: false,
+        shadowEnabled: true,
+        outlineOpacity: 1,
+        shadowOpacity: 1,
+        animationIn: { preset: "none", duration: 250 },
+        animationOut: { preset: "none", duration: 250 },
+      },
     },
     translation: {
       position: {
-        x: DESIGN_WIDTH / 2,
-        y: Math.round(centerY + (settings.arabicFontSize + settings.captionGap) / 2),
+        x: 540.9645317683082,
+        y: 1456.3911465618266,
       },
       fontSize: settings.translationFontSize,
-      color: "#FFFFFF",
+      color: "#E1FF00",
+      visual: {
+        opacity: 1,
+        rotation: 0,
+        outlineWidth: 10.5,
+        shadowDistance: 1,
+        outlineColor: "#000000",
+        shadowColor: "#000000",
+        outlineEnabled: false,
+        shadowEnabled: true,
+        outlineOpacity: 0,
+        shadowOpacity: 1,
+        animationIn: { preset: "none", duration: 250 },
+        animationOut: { preset: "none", duration: 250 },
+      },
     },
   };
 }
 
 export function defaultUiSettings(): UiCaptionSettings {
   return {
-    wordsPerCaption: 1,
+    wordsPerCaption: 3,
     translation: "saheehInternational",
     arabicFontName: DEFAULT_ARABIC_FONT_NAME,
     translationFontName: DEFAULT_TRANSLATION_FONT_NAME,
-    arabicFontSize: DEFAULT_ARABIC_FONT_SIZE,
-    translationFontSize: DEFAULT_TRANSLATION_FONT_SIZE,
+    arabicFontSize: 407,
+    translationFontSize: 150,
     captionGap: DEFAULT_CAPTION_GAP,
     speechPauseSeconds: 0.6,
     minimumWordSeconds: 0.5,
@@ -206,7 +231,32 @@ export function createEmptyProject(): UiProject {
     schemaVersion: PROJECT_SCHEMA_VERSION,
     settings,
     layout: defaultCaptionLayerPositions(settings),
-    overlays: [],
+    overlays: [{
+      id: "surah-default",
+      type: "text",
+      text: "{surah}",
+      autoSurah: true,
+      position: { x: 0.5007408352470869, y: 0.2696737610100933 },
+      width: 0.37051756400442293,
+      height: 0.03,
+      fontName: "Arial",
+      fontSize: 111,
+      color: "#FFFFFF",
+      visible: true,
+      start: 0,
+      visual: {
+        opacity: 1,
+        outlineWidth: 3,
+        shadowDistance: 7.5,
+        outlineColor: "#101010",
+        shadowColor: "#000000",
+        outlineEnabled: false,
+        shadowEnabled: false,
+        shadowOpacity: 1,
+        animationIn: { preset: "none", duration: 250 },
+        animationOut: { preset: "none", duration: 250 },
+      },
+    }],
     captionEdits: {},
   };
 }

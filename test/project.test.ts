@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyCaptionEdits, captionEventId } from "../src/ui/project.js";
+import { applyCaptionEdits, captionEventId, createEmptyProject } from "../src/ui/project.js";
 import type { AlignmentDocument } from "../src/types.js";
 
 const alignment: AlignmentDocument = {
@@ -61,5 +61,18 @@ describe("caption edit application", () => {
 
     expect(edited.words).toHaveLength(1);
     expect(edited.diagnostics.matchedWords).toBe(1);
+  });
+});
+
+describe("empty project defaults", () => {
+  it("starts without a video but uses the saved caption style and surah overlay defaults", () => {
+    const project = createEmptyProject();
+
+    expect(project.videoPath).toBeUndefined();
+    expect(project.videoName).toBeUndefined();
+    expect(project.settings).toMatchObject({ wordsPerCaption: 3, arabicFontSize: 407, translationFontSize: 150 });
+    expect(project.layout.arabic).toMatchObject({ position: { x: 540, y: 893.6249952746381 }, color: "#FFFFFF" });
+    expect(project.layout.translation).toMatchObject({ position: { x: 540.9645317683082, y: 1456.3911465618266 }, color: "#E1FF00" });
+    expect(project.overlays).toEqual([expect.objectContaining({ autoSurah: true, text: "{surah}", visible: true, start: 0 })]);
   });
 });

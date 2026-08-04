@@ -46,7 +46,10 @@ export async function renderCaptionedVideo(
     });
     args.push("-filter_complex", graph.join(";"), "-map", "[vout]", "-map", "0:a?");
   }
-  args.push("-c:v", "libx264", "-preset", "medium", "-crf", "18", "-c:a", "copy", "-movflags", "+faststart", output);
+  // Burn-in requires a new video stream, so use a visually transparent CRF
+  // and a slower preset to keep detail from the original picture. The audio
+  // is copied bit-for-bit because it does not need to be re-encoded here.
+  args.push("-c:v", "libx264", "-preset", "slow", "-crf", "16", "-c:a", "copy", "-movflags", "+faststart", output);
   await runProcess("ffmpeg", args);
 }
 
