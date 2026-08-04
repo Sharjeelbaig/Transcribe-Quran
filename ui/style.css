@@ -112,10 +112,11 @@ svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-lineca
 .rail-button:hover, .rail-button:focus-visible { border-color: var(--border); background: var(--surface-soft); color: var(--text); outline: none; }
 .rail-button.active { border-color: transparent; background: var(--accent-soft); color: var(--accent); font-weight: 700; }
 .editor-column { min-width: 0; padding: 0 22px 30px; }
-.editor-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 58px; }
-.toolbar-context { min-width: 0; gap: 8px; color: var(--muted); }
-.toolbar-context > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.context-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border-strong); }
+.editor-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; }
+.toolbar-context { min-width: 0; gap: 12px; color: var(--text); }
+.toolbar-context > span:last-child { min-width: 0; overflow: hidden; font-size: 14px; font-weight: 500; letter-spacing: .01em; text-overflow: ellipsis; white-space: nowrap; }
+.context-icon { display: grid; width: 40px; height: 40px; flex: 0 0 40px; place-items: center; border-radius: 12px; background: var(--surface-container); color: var(--accent); }
+.context-icon svg { width: 20px; height: 20px; stroke-width: 1.7; }
 .toolbar-actions { gap: 7px; flex-wrap: wrap; }
 .canvas-area { display: flex; min-height: 450px; align-items: center; justify-content: center; border: 1px solid color-mix(in srgb, var(--border) 22%, transparent); border-radius: var(--radius-lg); background: var(--canvas); box-shadow: inset 0 1px 0 rgba(255,255,255,.28); overflow: hidden; }
 .drop-zone { display: grid; max-width: 360px; place-items: center; padding: 50px 22px; text-align: center; }

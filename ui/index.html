@@ -15,6 +15,7 @@
       <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 4h12l2 2v14H5V4Zm3 0v5h7V4M8 20v-7h8v7"/></symbol>
       <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0 5-5m-5 5-5-5M5 20h14"/></symbol>
       <symbol id="i-export" viewBox="0 0 24 24"><path d="M14 4h6v6m-1-5-8 8M19 14v5H5V5h5"/></symbol>
+      <symbol id="i-film" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v4m4-4v4m4-4v4M8 16v4m4-4v4m4-4v4M4 8h16M4 16h16"/></symbol>
       <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm8 4-2 1 .1 2.2-1.9 1.1-1.8-1.2-1.8 1.2-1.9-1.1.1-2.2-2-1 0-2.2 2-1-.1-2.2L8.6 5l1.8 1.2 1.8-1.2 1.9 1.1-.1 2.2 2 1V12Z"/></symbol>
       <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 4 8 4-8 4-8-4 8-4Zm-8 8 8 4 8-4M4 16l8 4 8-4"/></symbol>
       <symbol id="i-layout" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/></symbol>
@@ -72,7 +73,7 @@
 
       <main class="editor-column">
         <div class="editor-toolbar">
-          <div class="toolbar-context"><span class="context-dot"></span><span id="video-name">No video selected</span></div>
+          <div class="toolbar-context"><span class="context-icon" aria-hidden="true"><svg><use href="#i-film"/></svg></span><span id="video-name">No video selected</span></div>
           <div class="toolbar-actions">
             <div class="button-group" role="group" aria-label="Transcription actions">
               <button id="reset-layout" class="button small outline">Reset layout</button>
