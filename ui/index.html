@@ -192,7 +192,7 @@
 
         <section id="tool-engine" class="inspector-section hidden">
           <div class="inspector-title"><div><span class="section-kicker">ENGINE</span><h2>Transcription</h2></div></div>
-          <label>Whisper model<input id="model" type="text" value="Sharjeelbaig/whisper-tiny-ar-quran-onnx" /></label>
+          <label>Whisper model<select id="model" aria-label="Whisper model"><option value="Sharjeelbaig/whisper-base-onnx" selected>Sharjeelbaig/whisper-base-onnx</option><option value="Sharjeelbaig/whisper-tiny-ar-quran-onnx">Sharjeelbaig/whisper-tiny-ar-quran-onnx</option></select></label>
           <div class="field-grid"><label>Precision<select id="dtype" aria-label="Precision"><option value="q8" selected>q8</option><option value="q4">q4</option><option value="fp16">fp16</option><option value="fp32">fp32</option></select></label><label>Confidence<input id="confidence" type="number" min="0" max="1" step="0.01" value="0.5" /></label></div>
           <p class="hint">The model runs locally. Lower confidence allows more matches but can increase false positives.</p>
         </section>
@@ -205,6 +205,26 @@
     </div>
 
     <div id="toast" class="toast hidden"></div>
+    <dialog id="transcription-dialog" class="transcription-dialog" aria-labelledby="transcription-dialog-title">
+      <div class="transcription-card">
+        <div class="transcription-heading">
+          <div class="md3-spinner" role="status" aria-label="Transcription in progress">
+            <svg viewBox="0 0 48 48" aria-hidden="true"><circle class="md3-spinner-track" cx="24" cy="24" r="18"></circle><circle class="md3-spinner-arc" cx="24" cy="24" r="18"></circle></svg>
+          </div>
+          <div class="transcription-copy">
+          <h2 id="transcription-dialog-title">Transcribing locally and matching Qur'an words…</h2>
+          </div>
+        </div>
+        <ol id="transcription-tasks" class="transcription-tasks" aria-label="Transcription progress">
+          <li class="transcription-task" data-step="1" data-state="pending"><span class="transcription-task-icon" aria-hidden="true"></span><span class="transcription-task-label">Extract audio</span></li>
+          <li class="transcription-task" data-step="2" data-state="pending"><span class="transcription-task-icon" aria-hidden="true"></span><span class="transcription-task-label">Find speech</span></li>
+          <li class="transcription-task" data-step="3" data-state="pending"><span class="transcription-task-icon" aria-hidden="true"></span><span class="transcription-task-label">Load Qur'an corpus</span></li>
+          <li class="transcription-task" data-step="4" data-state="pending"><span class="transcription-task-icon" aria-hidden="true"></span><span class="transcription-task-label">Match and time words</span></li>
+          <li class="transcription-task" data-step="5" data-state="pending"><span class="transcription-task-icon" aria-hidden="true"></span><span class="transcription-task-label">Generate captions</span></li>
+          <li class="transcription-task" data-step="6" data-state="pending"><span class="transcription-task-icon" aria-hidden="true"></span><span class="transcription-task-label">Finish</span></li>
+        </ol>
+      </div>
+    </dialog>
     <dialog id="shortcuts-dialog" class="shortcuts-dialog" aria-labelledby="shortcuts-title">
       <div class="shortcuts-heading"><div><span class="section-kicker">EDITOR</span><h2 id="shortcuts-title">Keyboard shortcuts</h2></div><button id="shortcuts-close" class="icon-button quiet" data-tooltip="Close" aria-label="Close shortcuts">×</button></div>
       <div class="shortcuts-grid">

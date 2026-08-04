@@ -24,7 +24,7 @@ import {
 } from "./quran/passage.js";
 import { renderCaptionedVideo } from "./video/render.js";
 import { stretchAudio } from "./audio/tempo.js";
-import type { AlignedWord, AlignmentDocument, ProcessOptions, TranscriptWord } from "./types.js";
+import type { AlignedWord, AlignmentDocument, ProcessOptions, ProcessStep, TranscriptWord } from "./types.js";
 
 export interface ProcessResult {
   alignmentPath: string;
@@ -74,6 +74,11 @@ function sliceAudio(audio: Float32Array, start: number, end: number): Float32Arr
   return audio.slice(first, Math.max(first + 1, last));
 }
 
+function reportProgress(options: ProcessOptions, step: ProcessStep, message: string): void {
+  options.onProgress?.({ step, message });
+  console.error(`[${step}/6] ${message}`);
+}
+
 export async function processVideo(options: ProcessOptions): Promise<ProcessResult> {
   const input = resolve(options.input);
   await ensureInput(input);
@@ -93,12 +98,12 @@ export async function processVideo(options: ProcessOptions): Promise<ProcessResu
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "transcribe-quran-"));
   const pcmPath = join(temporaryDirectory, `${basename(input, extname(input))}.f32le`);
   try {
-    console.error("[1/6] Extracting audio with FFmpeg…");
+    reportProgress(options, 1, "Extracting audio with FFmpeg…");
     await extractPcmAudio(input, pcmPath);
     const audio = await readFloat32Pcm(pcmPath);
     const duration = durationSeconds(audio);
 
-    console.error("[2/6] Finding where the reciter speaks and stops…");
+    reportProgress(options, 2, "Finding where the reciter speaks and stops…");
     const speech = analyzeSpeech(audio, { pauseSeconds: speechPauseSeconds });
     // A phrase is cut to fit the model's audio window, never to fit an ayah:
     // the passage it contains is discovered afterwards.
@@ -106,11 +111,11 @@ export async function processVideo(options: ProcessOptions): Promise<ProcessResu
     const voiced = speech.segments.reduce((total, segment) => total + (segment.end - segment.start), 0);
     console.error(`      ${phrases.length} phrases, ${voiced.toFixed(1)} s of recitation in ${duration.toFixed(1)} s of audio.`);
 
-    console.error("[3/6] Loading and indexing the canonical Qur'an…");
+    reportProgress(options, 3, "Loading and indexing the canonical Qur'an…");
     const corpus = await loadQuranCorpus();
     const index = buildQuranIndex(corpus);
 
-    console.error("[4/6] Identifying each phrase and measuring its word timings…");
+    reportProgress(options, 4, "Identifying each phrase and measuring its word timings…");
     const session = await createModelSession({
       model: options.model,
       dtype: options.dtype,
@@ -289,7 +294,7 @@ export async function processVideo(options: ProcessOptions): Promise<ProcessResu
     };
     await writeFile(paths.alignment, `${JSON.stringify(alignment, null, 2)}\n`, "utf8");
 
-    console.error("[5/6] Generating RTL word-by-word ASS captions…");
+    reportProgress(options, 5, "Generating RTL word-by-word ASS captions…");
     await writeFile(
       paths.subtitles,
       createAss(finalWords, index, options.wordsPerCaption ?? 1, {
@@ -309,7 +314,7 @@ export async function processVideo(options: ProcessOptions): Promise<ProcessResu
 
     let videoPath: string | undefined;
     if (options.burnVideo) {
-      console.error("[6/6] Rendering the captioned video…");
+      reportProgress(options, 6, "Rendering the captioned video…");
       const temporaryVideo = join(temporaryDirectory, `rendered${extname(paths.video) || ".mp4"}`);
       await renderCaptionedVideo(input, paths.subtitles, temporaryVideo);
       try {
@@ -321,7 +326,7 @@ export async function processVideo(options: ProcessOptions): Promise<ProcessResu
       }
       videoPath = paths.video;
     } else {
-      console.error("[6/6] Video rendering skipped (--no-burn).");
+      reportProgress(options, 6, "Video rendering skipped (--no-burn).");
     }
 
     return {

@@ -329,6 +329,8 @@ flowchart TB
 ## Offline behavior
 
 The default q8 model is
+[`Sharjeelbaig/whisper-base-onnx`](https://huggingface.co/Sharjeelbaig/whisper-base-onnx).
+The browser editor also offers the Qur’an-tuned
 [`Sharjeelbaig/whisper-tiny-ar-quran-onnx`](https://huggingface.co/Sharjeelbaig/whisper-tiny-ar-quran-onnx).
 Transformers.js stores it in the operating system cache. Run once while online,
 then add `--offline` to guarantee that remote model access is disabled.

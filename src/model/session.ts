@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { normalizeArabic, splitNormalizedArabic } from "../quran/normalize-arabic.js";
 import type { TranscriptWord } from "../types.js";
 
-export const DEFAULT_MODEL = "Sharjeelbaig/whisper-tiny-ar-quran-onnx";
+export const MODEL_OPTIONS = [
+  "Sharjeelbaig/whisper-base-onnx",
+  "Sharjeelbaig/whisper-tiny-ar-quran-onnx",
+] as const;
+
+export const DEFAULT_MODEL = MODEL_OPTIONS[0];
 
 /** Whisper reads 30 seconds at a time; a phrase longer than this must be split. */
 export const MAX_SEGMENT_SECONDS = 28;

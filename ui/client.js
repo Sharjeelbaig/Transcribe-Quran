@@ -9,6 +9,12 @@ import {
 } from "./renderer.js";
 import { exportMp4, exportSupport } from "./export.js";
 
+const MODEL_OPTIONS = [
+  "Sharjeelbaig/whisper-base-onnx",
+  "Sharjeelbaig/whisper-tiny-ar-quran-onnx",
+];
+const DEFAULT_MODEL = MODEL_OPTIONS[0];
+
 const $ = (id) => document.getElementById(id);
 const video = $("video");
 const stage = $("stage");
@@ -35,7 +41,12 @@ const timelineSummary = $("timeline-summary");
 const renderProgress = $("render-progress");
 const toast = $("toast");
 const captionEditor = $("caption-editor");
+const transcriptionDialog = $("transcription-dialog");
 const shortcutsDialog = $("shortcuts-dialog");
+
+transcriptionDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+});
 
 let state = {
   project: {
@@ -51,7 +62,7 @@ let state = {
       minimumWordSeconds: 0.5,
       captionHoldSeconds: 0.35,
       confidenceThreshold: 0.5,
-      model: "Sharjeelbaig/whisper-tiny-ar-quran-onnx",
+      model: DEFAULT_MODEL,
       dtype: "q8",
       offline: false
     },
@@ -307,6 +318,29 @@ function setStatus(message, isError = false) {
   status.classList.toggle("error", isError);
 }
 
+function syncTranscriptionTasks(step = 1, active = true) {
+  const current = Math.min(6, Math.max(1, Math.round(Number(step) || 1)));
+  document.querySelectorAll("#transcription-tasks [data-step]").forEach((item) => {
+    const itemStep = Number(item.dataset.step);
+    const taskState = active
+      ? itemStep < current ? "complete" : itemStep === current ? "active" : "pending"
+      : "pending";
+    item.dataset.state = taskState;
+    if (taskState === "active") item.setAttribute("aria-current", "step");
+    else item.removeAttribute("aria-current");
+  });
+}
+
+function syncTranscriptionDialog() {
+  const running = state.job.status === "running";
+  if (running) {
+    syncTranscriptionTasks(state.job.step, true);
+    if (!transcriptionDialog.open) transcriptionDialog.showModal();
+    return;
+  }
+  if (transcriptionDialog.open) transcriptionDialog.close();
+}
+
 function formatTime(seconds) {
   const value = Math.max(0, Number(seconds) || 0);
   const minutes = Math.floor(value / 60);
@@ -475,7 +509,9 @@ function syncControlsFromProject() {
   $("min-word-seconds").value = settings.minimumWordSeconds ?? 0.5;
   $("caption-hold").value = settings.captionHoldSeconds ?? 0.35;
   $("offline").checked = Boolean(settings.offline);
-  $("model").value = settings.model;
+  const model = MODEL_OPTIONS.includes(settings.model) ? settings.model : DEFAULT_MODEL;
+  settings.model = model;
+  $("model").value = model;
   $("dtype").value = settings.dtype;
   $("confidence").value = settings.confidenceThreshold;
   $("arabic-font-label").textContent = settings.arabicFontName;
@@ -509,7 +545,7 @@ function syncSettingsFromControls() {
   const hold = Number($("caption-hold").value);
   settings.captionHoldSeconds = Math.min(3, Math.max(0, $("caption-hold").value.trim() && Number.isFinite(hold) ? hold : 0.35));
   settings.offline = $("offline").checked;
-  settings.model = $("model").value.trim() || "Sharjeelbaig/whisper-tiny-ar-quran-onnx";
+  settings.model = MODEL_OPTIONS.includes($("model").value) ? $("model").value : DEFAULT_MODEL;
   settings.dtype = $("dtype").value;
   settings.confidenceThreshold = Math.min(1, Math.max(0, Number($("confidence").value) || 0));
   state.project.layout.arabic.fontSize = settings.arabicFontSize;
@@ -903,6 +939,7 @@ function renderState(next) {
   renderTimeline();
   updateCaptionEditor();
   transcribeButton.setAttribute("aria-busy", String(state.job.status === "running"));
+  syncTranscriptionDialog();
   if (state.job.status === "running") setStatus(state.job.message || "Working locally…");
   else if (state.job.status === "error") setStatus(state.job.message || "Something went wrong.", true);
   else if (state.job.status === "complete") setStatus(state.job.message || "Ready to edit.");
@@ -957,12 +994,17 @@ async function uploadVideo(file) {
 async function transcribe() {
   commitCaptionEdit();
   syncSettingsFromControls();
-  setStatus("Starting local transcription…");
+  const message = "Transcribing locally and matching Qur'an words…";
+  setStatus(message);
+  $("transcription-dialog-title").textContent = message;
+  syncTranscriptionTasks(1, true);
+  if (!transcriptionDialog.open) transcriptionDialog.showModal();
   try {
     await api("/api/project", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(state.project) });
     await api("/api/transcribe", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(state.project.settings) });
     await refresh();
   } catch (error) {
+    if (transcriptionDialog.open) transcriptionDialog.close();
     setStatus(error.message, true);
   }
 }

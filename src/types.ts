@@ -166,6 +166,13 @@ export interface TranscriptionResult {
   words: TranscriptWord[];
 }
 
+export type ProcessStep = 1 | 2 | 3 | 4 | 5 | 6;
+
+export interface ProcessProgress {
+  step: ProcessStep;
+  message: string;
+}
+
 export interface ProcessOptions {
   input: string;
   output?: string;
@@ -202,4 +209,5 @@ export interface ProcessOptions {
   offline: boolean;
   keepTemporaryFiles: boolean;
   verbose: boolean;
+  onProgress?: (progress: ProcessProgress) => void;
 }

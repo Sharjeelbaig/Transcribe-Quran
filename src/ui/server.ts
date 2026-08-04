@@ -11,7 +11,7 @@ import { createAss } from "../captions/ass.js";
 import { processVideo } from "../pipeline.js";
 import { buildQuranIndex, loadQuranCorpus, type QuranIndex } from "../quran/corpus.js";
 import { bundledFontDirectory, renderCaptionedVideo, type ImageOverlay } from "../video/render.js";
-import type { AlignmentDocument, TranslationKey } from "../types.js";
+import type { AlignmentDocument, ProcessProgress, TranslationKey } from "../types.js";
 import {
   applyCaptionEdits,
   createEmptyProject,
@@ -42,6 +42,7 @@ export interface UiServerHandle {
 
 type Job = {
   status: "idle" | "running" | "complete" | "error";
+  step?: ProcessProgress["step"];
   message?: string;
 };
 
@@ -577,7 +578,7 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
       job = { status: "error", message: "Choose a video before transcribing." };
       return;
     }
-    job = { status: "running", message: "Transcribing locally and matching Qur'an words…" };
+    job = { status: "running", step: 1, message: "Transcribing locally and matching Qur'an words…" };
     alignment = undefined;
     project.captionEdits = {};
     try {
@@ -606,6 +607,9 @@ export async function startUiServer(options: StartUiServerOptions): Promise<UiSe
         offline: settings.offline,
         keepTemporaryFiles: false,
         verbose: false,
+        onProgress: ({ step, message }) => {
+          job = { status: "running", step, message };
+        },
       });
       await readAlignment();
       const timing = result.alignment.diagnostics;

@@ -37,6 +37,7 @@ export {
   createModelSession,
   spokenForm,
   DEFAULT_MODEL,
+  MODEL_OPTIONS,
   MAX_SEGMENT_SECONDS,
   type ForcedSpan,
   type ModelSession,
